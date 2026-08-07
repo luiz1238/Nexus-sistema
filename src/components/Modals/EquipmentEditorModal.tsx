@@ -1,140 +1,161 @@
 import type { Equipment } from '@prisma/client';
-import { ChangeEvent, useEffect } from 'react';
-import { useState } from 'react';
+import { ChangeEvent, useEffect, useState } from 'react';
 import Container from 'react-bootstrap/Container';
-import FormCheck from 'react-bootstrap/FormCheck';
 import FormControl from 'react-bootstrap/FormControl';
 import FormGroup from 'react-bootstrap/FormGroup';
+import FormCheck from 'react-bootstrap/FormCheck';
 import FormLabel from 'react-bootstrap/FormLabel';
 import SheetModal from './SheetModal';
 
-const initialState: Equipment = {
-	id: 0,
-	ammo: 0,
-	attacks: '1',
-	damage: '1d3',
-	name: '',
-	range: '-',
-	type: 'Comum',
-	visible: true,
+export type EquipmentWithDefect = Equipment & {
+  defeito?: string;
 };
 
-export default function EquipmentEditorModal(props: EditorModalProps<Equipment>) {
-	const [equipment, setEquipment] = useState(initialState);
+const initialState: EquipmentWithDefect = {
+  id: 0,
+  name: '',
+  type: '',
+  damage: '',
+  range: '',
+  attacks: '',
+  ammo: 0,
+  slots: 0,
+  visible: true,
+  defeito: '',
+};
 
-	useEffect(() => {
-		if (!props.data) return;
-		setEquipment(props.data);
-	}, [props.data]);
+export default function EquipmentEditorModal(props: EditorModalProps<EquipmentWithDefect>) {
+  const [equipment, setEquipment] = useState<EquipmentWithDefect>(initialState);
 
-	function hide() {
-		setEquipment(initialState);
-		props.onHide();
-	}
+  useEffect(() => {
+    if (!props.data) return;
+    setEquipment(props.data);
+  }, [props.data]);
 
-	function onAmmoChange(ev: ChangeEvent<HTMLInputElement>) {
-		if (equipment.ammo === null) return;
+  function hide() {
+    setEquipment(initialState);
+    props.onHide();
+  }
 
-		const aux = ev.currentTarget.value;
-		let newAmmo = parseInt(aux);
+  function onAmmoChange(ev: ChangeEvent<HTMLInputElement>) {
+    const aux = ev.target.value;
+    let newAmmo = parseInt(aux);
 
-		if (aux.length === 0) newAmmo = 0;
-		else if (isNaN(newAmmo)) return;
+    if (aux.length === 0) newAmmo = 0;
+    else if (isNaN(newAmmo)) return;
 
-		setEquipment((eq) => ({ ...eq, ammo: newAmmo }));
-	}
+    setEquipment((eq) => ({ ...eq, ammo: newAmmo }));
+  }
 
-	return (
-		<SheetModal
-			animation={false}
-			title={props.operation === 'create' ? 'Criar' : 'Editar'}
-			show={props.show}
-			onHide={hide}
-			applyButton={{
-				name: props.operation === 'create' ? 'Criar' : 'Editar',
-				onApply: () => {
-					props.onSubmit(equipment);
-					hide();
-				},
-				disabled: props.disabled,
-			}}
-			scrollable>
-			<Container fluid>
-				<FormGroup controlId='createEquipmentName' className='mb-3'>
-					<FormLabel>Nome</FormLabel>
-					<FormControl
-						autoFocus
-						className='theme-element'
-						value={equipment.name}
-						onChange={(ev) => setEquipment((eq) => ({ ...eq, name: ev.target.value }))}
-					/>
-				</FormGroup>
+  function onSlotsChange(ev: ChangeEvent<HTMLInputElement>) {
+    const aux = ev.target.value;
+    let newSlots = parseInt(aux);
 
-				<FormGroup controlId='createEquipmentType' className='mb-3'>
-					<FormLabel>Tipo</FormLabel>
-					<FormControl
-						className='theme-element'
-						value={equipment.type}
-						onChange={(ev) => setEquipment((eq) => ({ ...eq, type: ev.target.value }))}
-					/>
-				</FormGroup>
+    if (aux.length === 0) newSlots = 0;
+    else if (isNaN(newSlots)) return;
 
-				<FormGroup controlId='createEquipmentDamage' className='mb-3'>
-					<FormLabel>Dano</FormLabel>
-					<FormControl
-						className='theme-element'
-						value={equipment.damage}
-						onChange={(ev) => setEquipment((eq) => ({ ...eq, damage: ev.target.value }))}
-					/>
-				</FormGroup>
+    setEquipment((eq) => ({ ...eq, slots: newSlots }));
+  }
 
-				<FormGroup controlId='createEquipmentRange' className='mb-3'>
-					<FormLabel>Alcance</FormLabel>
-					<FormControl
-						className='theme-element'
-						value={equipment.range}
-						onChange={(ev) => setEquipment((eq) => ({ ...eq, range: ev.target.value }))}
-					/>
-				</FormGroup>
+  return (
+    <SheetModal
+      animation={false}
+      title={props.operation === 'create' ? 'Criar Equipamento' : 'Editar Equipamento'}
+      show={props.show}
+      onHide={hide}
+      applyButton={{
+        name: props.operation === 'create' ? 'Criar' : 'Editar',
+        onApply: () => {
+          props.onSubmit(equipment);
+          hide();
+        },
+        disabled: props.disabled,
+      }}
+      scrollable>
+      <Container fluid>
+        <FormGroup controlId='createEquipmentName' className='mb-3'>
+          <FormLabel>Nome</FormLabel>
+          <FormControl
+            autoFocus
+            className='theme-element'
+            value={equipment.name}
+            onChange={(ev) => setEquipment((eq) => ({ ...eq, name: ev.target.value }))}
+          />
+        </FormGroup>
 
-				<FormGroup controlId='createEquipmentAttacks' className='mb-3'>
-					<FormLabel>Ataques</FormLabel>
-					<FormControl
-						className='theme-element'
-						value={equipment.attacks}
-						onChange={(ev) => setEquipment((eq) => ({ ...eq, attacks: ev.target.value }))}
-					/>
-				</FormGroup>
+        <FormGroup controlId='createEquipmentType' className='mb-3'>
+          <FormLabel>Tipo</FormLabel>
+          <FormControl
+            className='theme-element'
+            value={equipment.type}
+            onChange={(ev) => setEquipment((eq) => ({ ...eq, type: ev.target.value }))}
+          />
+        </FormGroup>
 
-				<FormCheck
-					inline
-					checked={equipment.ammo !== null}
-					onChange={(ev) =>
-						setEquipment((eq) => ({ ...eq, ammo: ev.target.checked ? 0 : null }))
-					}
-					id='createEquipmentRollable'
-					label='Possui munição?'
-				/>
+        <FormGroup controlId='createEquipmentDamage' className='mb-3'>
+          <FormLabel>Dano</FormLabel>
+          <FormControl
+            className='theme-element'
+            value={equipment.damage}
+            onChange={(ev) => setEquipment((eq) => ({ ...eq, damage: ev.target.value }))}
+          />
+        </FormGroup>
 
-				<FormCheck
-					inline
-					checked={equipment.visible}
-					onChange={(ev) => setEquipment((eq) => ({ ...eq, visible: ev.target.checked }))}
-					id='createEquipmentVisible'
-					label='Visível?'
-				/>
+        <FormGroup controlId='createEquipmentRange' className='mb-3'>
+          <FormLabel>Alcance</FormLabel>
+          <FormControl
+            className='theme-element'
+            value={equipment.range}
+            onChange={(ev) => setEquipment((eq) => ({ ...eq, range: ev.target.value }))}
+          />
+        </FormGroup>
 
-				{equipment.ammo != null && (
-					<FormGroup controlId='createEquipmentAmmo' className='mb-3'>
-						<FormLabel>Munição</FormLabel>
-						<FormControl
-							className='theme-element'
-							value={equipment.ammo}
-							onChange={onAmmoChange}
-						/>
-					</FormGroup>
-				)}
-			</Container>
-		</SheetModal>
-	);
+        <FormGroup controlId='createEquipmentAttacks' className='mb-3'>
+          <FormLabel>Ataques</FormLabel>
+          <FormControl
+            className='theme-element'
+            value={equipment.attacks}
+            onChange={(ev) => setEquipment((eq) => ({ ...eq, attacks: ev.target.value }))}
+          />
+        </FormGroup>
+
+        {/* NOVO CAMPO: Defeito */}
+        <FormGroup controlId='createEquipmentDefeito' className='mb-3'>
+          <FormLabel>Defeito</FormLabel>
+          <FormControl
+            className='theme-element'
+            placeholder='Ex: Emperra com 1, Avaria no gatilho, etc.'
+            value={equipment.defeito || ''}
+            onChange={(ev) => setEquipment((eq) => ({ ...eq, defeito: ev.target.value }))}
+          />
+        </FormGroup>
+
+        <FormGroup controlId='createEquipmentAmmo' className='mb-3'>
+          <FormLabel>Munição</FormLabel>
+          <FormControl
+            className='theme-element'
+            value={equipment.ammo}
+            onChange={onAmmoChange}
+          />
+        </FormGroup>
+
+        <FormGroup controlId='createEquipmentSlots' className='mb-3'>
+          <FormLabel>Espaços</FormLabel>
+          <FormControl
+            className='theme-element'
+            value={equipment.slots}
+            onChange={onSlotsChange}
+          />
+        </FormGroup>
+
+        <FormCheck
+          inline
+          checked={equipment.visible}
+          onChange={(ev) => setEquipment((eq) => ({ ...eq, visible: ev.target.checked }))}
+          id='createEquipmentVisible'
+          label='Visível?'
+        />
+      </Container>
+    </SheetModal>
+  );
 }

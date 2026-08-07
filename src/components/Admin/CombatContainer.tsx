@@ -237,3 +237,22 @@ export default function CombatContainer(props: {
 		</DataContainer>
 	);
 }
+// src/components/Admin/CombatContainer.tsx
+import api from '../../utils/api';
+
+// Na função onde você renderiza o nome do participante do combate:
+function highlightPlayerPortrait(playerId: number, color?: string) {
+  api.post('/portrait/highlight', {
+    playerId,
+    color: color || '#ddaf0f', // passa a cor associada ao jogador/ficha
+  }).catch((err) => console.error(err));
+}
+
+// No JSX da lista/tabela de participantes do combate:
+<span
+  onClick={() => highlightPlayerPortrait(combatant.playerId, combatant.color)}
+  style={{ cursor: 'pointer' }}
+  title="Clique para fazer o Portrait brilhar na live"
+>
+  {combatant.name}
+</span>

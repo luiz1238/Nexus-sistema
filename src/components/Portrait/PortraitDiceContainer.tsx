@@ -24,6 +24,11 @@ export default function PortraitDiceContainer(props: {
   const showDiceRef = useRef(props.showDice);
   const { on } = useRealtime();
 
+  // Sincroniza o ref sempre que a prop showDice muda no componente pai
+  useEffect(() => {
+    showDiceRef.current = props.showDice;
+  }, [props.showDice]);
+
   const [diceResult, setDiceResult] = useState<number | null>(null);
   const diceResultRef = useRef<HTMLDivElement>(null);
   const lastDiceResult = useRef(0);
@@ -49,27 +54,21 @@ export default function PortraitDiceContainer(props: {
     }
 
     function showDiceRoll() {
-      if (showDiceRef.current) return;
-      showDiceRef.current = true;
       if (diceVideo.current) {
         props.onShowDice();
         diceVideo.current.currentTime = 0;
-        diceVideo.current.play();
+        diceVideo.current.play().catch(() => {});
       }
     }
 
-    async function showNextResult(result: DiceResponse) {
-      showDiceRoll();
-      await sleep(750);
-      diceData.current = undefined;
-      onDiceResult(result);
-    }
-
     async function onDiceResult(result: DiceResponse) {
-      if (diceData.current) return diceQueue.current.push(result);
-      if (!showDiceRef.current) return showNextResult(result);
+      if (diceData.current) {
+        diceQueue.current.push(result);
+        return;
+      }
 
       diceData.current = result;
+      showDiceRoll();
 
       lastDiceResult.current = result.roll;
       setDiceResult(result.roll);
@@ -78,7 +77,10 @@ export default function PortraitDiceContainer(props: {
         lastDiceDescription.current = result.resultType.description;
         await sleep(750);
         setDiceDescription(result.resultType.description);
+      } else {
+        setDiceDescription(null);
       }
+
       await sleep(1500);
 
       setDiceResult(null);
@@ -87,11 +89,13 @@ export default function PortraitDiceContainer(props: {
       await sleep(250);
       props.onHideDice();
       await sleep(600);
-      showDiceRef.current = false;
+
+      diceData.current = undefined;
 
       const next = diceQueue.current.shift();
-      if (next) showNextResult(next);
-      else diceData.current = undefined;
+      if (next) {
+        onDiceResult(next);
+      }
     }
 
     const unsub1 = on('diceRoll', (payload) => {
@@ -103,14 +107,17 @@ export default function PortraitDiceContainer(props: {
       if (payload.playerId !== props.playerId) return;
       const { results, dices } = payload;
 
-      if (results.length === 1) return onDiceResult(results[0]);
+      if (!results || results.length === 0) return;
+
+      if (results.length === 1) {
+        return onDiceResult(results[0]);
+      }
 
       if (Array.isArray(dices)) {
         onDiceResult({
           roll: results.reduce((prev, cur) => prev + cur.roll, 0),
         });
       } else {
-        if (diceData.current) return diceQueue.current.push(...results);
         const first = results.shift();
         if (!first) return;
         diceQueue.current.push(...results);
@@ -118,8 +125,11 @@ export default function PortraitDiceContainer(props: {
       }
     });
 
-    return () => { unsub1?.(); unsub2?.(); };
-  }, [props.showDiceRoll]);
+    return () => { 
+      unsub1?.(); 
+      unsub2?.(); 
+    };
+  }, [props.showDiceRoll, props.playerId, props.color]);
 
   const isDebugMode = !!props.debug;
 
@@ -135,26 +145,26 @@ export default function PortraitDiceContainer(props: {
       zIndex={200}
       playerId={props.playerId}
     >
-    <div className={styles.diceContainerInner}>
-      <video
-        muted
-        className={`${isDebugMode ? styles.diceDebug : `popout${props.showDice ? ' show' : ''} ${styles.dice}`}`}
-        ref={diceVideo}
-        preload="auto"
-      >
-        <source src='/dice_animation.webm' />
-      </video>
-      {(isDebugMode || diceResult !== null || diceDescription !== null) && (
-        <div className={styles.diceTextGroup}>
-          <div className={styles.result} ref={diceResultRef}>
-            {isDebugMode ? '42' : (diceResult || lastDiceResult.current || '')}
+      <div className={styles.diceContainerInner}>
+        <video
+          muted
+          className={`${isDebugMode ? styles.diceDebug : `popout${props.showDice ? ' show' : ''} ${styles.dice}`}`}
+          ref={diceVideo}
+          preload="auto"
+        >
+          <source src='/dice_animation.webm' />
+        </video>
+        {(isDebugMode || diceResult !== null || diceDescription !== null) && (
+          <div className={styles.diceTextGroup}>
+            <div className={styles.result} ref={diceResultRef}>
+              {isDebugMode ? '42' : (diceResult || lastDiceResult.current || '')}
+            </div>
+            <div className={styles.description} ref={diceDescriptionRef}>
+              {isDebugMode ? 'Crítico' : (diceDescription || lastDiceDescription.current || '')}
+            </div>
           </div>
-          <div className={styles.description} ref={diceDescriptionRef}>
-            {isDebugMode ? 'Crítico' : (diceDescription || lastDiceDescription.current || '')}
-          </div>
-        </div>
-      )}
-    </div>
-  </PortraitDraggableResizable>
+        )}
+      </div>
+    </PortraitDraggableResizable>
   );
 }

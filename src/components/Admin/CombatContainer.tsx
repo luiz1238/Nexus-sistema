@@ -17,20 +17,23 @@ import DataContainer from '../DataContainer';
 type Entity = {
   id: number;
   name: string;
+  color?: string;
 };
 
 type SortableContainerProps = {
   entities: Entity[];
   pointer: number;
   removeEntity: (id: number) => void;
-  highlightEntity: (id: number) => void;
+  highlightEntity: (id: number, color?: string) => void;
+  updateEntityColor: (id: number, color: string) => void;
 };
 
 const style = { maxWidth: '4rem' };
 
-function handleHighlight(playerId: number | null) {
+function handleHighlight(playerId: number | null, color?: string) {
   api.post('/portrait/highlight', {
     playerId,
+    color,
   }).catch((err) => console.error(err));
 }
 
@@ -45,6 +48,7 @@ const SortableList = SortableContainer((props: SortableContainerProps) => {
           selected={props.pointer === index}
           removeEntity={props.removeEntity}
           highlightEntity={props.highlightEntity}
+          updateEntityColor={props.updateEntityColor}
         />
       ))}
     </ListGroup>
@@ -55,26 +59,55 @@ type SortableElementProps = {
   entity: Entity;
   selected?: boolean;
   removeEntity: (id: number) => void;
-  highlightEntity: (id: number) => void;
+  highlightEntity: (id: number, color?: string) => void;
+  updateEntityColor: (id: number, color: string) => void;
 };
 
 const SortableItem = SortableElement((props: SortableElementProps) => {
+  const currentColor = props.entity.color || '#ddaf0f';
+
   return (
     <ListGroup.Item className={props.selected ? 'selected' : ''}>
-      <div className="d-inline-block">{props.entity.name || 'Desconhecido'}</div>
+      <div className="d-inline-block me-2">{props.entity.name || 'Desconhecido'}</div>
+      
+      {/* Seletor de cor do brilho/aura para o personagem */}
+      <input
+        type="color"
+        value={currentColor}
+        title="Escolha a cor do brilho/aura para este personagem"
+        className="me-2 align-middle"
+        style={{
+          border: 'none',
+          width: '28px',
+          height: '28px',
+          padding: '0',
+          background: 'transparent',
+          cursor: 'pointer',
+          borderRadius: '4px',
+        }}
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => {
+          const newColor = e.target.value;
+          props.updateEntityColor(props.entity.id, newColor);
+          props.highlightEntity(props.entity.id, newColor);
+        }}
+      />
+
       <BottomTextInput className="mx-2 text-center" defaultValue="0" style={style} />
+      
       <Button
         size="sm"
         variant="outline-warning"
         className="me-1"
-        title="Ativar brilho do personagem na live"
+        title="Ativar brilho do personagem na live com a cor selecionada"
         onClick={(e) => {
           e.stopPropagation();
-          props.highlightEntity(props.entity.id);
+          props.highlightEntity(props.entity.id, currentColor);
         }}
       >
         ✨
       </Button>
+      
       <Button
         size="sm"
         variant="secondary"
@@ -192,6 +225,12 @@ export default function CombatContainer(props: {
     setEntities(newEntities);
   }
 
+  function updateEntityColor(id: number, color: string) {
+    setEntities((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, color } : e))
+    );
+  }
+
   function emptyList() {
     setEntities([]);
     setPointer(0);
@@ -210,7 +249,7 @@ export default function CombatContainer(props: {
           return (
             <Dropdown.Item
               key={pl.id}
-              onClick={() => setEntities([...entities, { ...pl }])}
+              onClick={() => setEntities([...entities, { ...pl, color: '#ddaf0f' }])}
             >
               {pl.name || 'Desconhecido'}
             </Dropdown.Item>
@@ -241,7 +280,8 @@ export default function CombatContainer(props: {
               onSortEnd={onSortEnd}
               pointer={pointer}
               removeEntity={removeEntity}
-              highlightEntity={(id) => handleHighlight(id)}
+              highlightEntity={(id, color) => handleHighlight(id, color)}
+              updateEntityColor={updateEntityColor}
             />
           </div>
         </Col>

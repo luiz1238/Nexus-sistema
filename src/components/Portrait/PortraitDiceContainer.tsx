@@ -18,65 +18,101 @@ export default function PortraitDiceContainer(props: {
   debug?: boolean;
   layout?: LayoutData | null;
 }) {
-  const diceQueue = useRef<any[]>([]);
-  const isAnimating = useRef(false);
-
+  const isProcessing = useRef(false);
+  const queue = useRef<any[]>([]);
   const { on } = useRealtime();
 
   const [diceResult, setDiceResult] = useState<number | string | null>(null);
-  const diceResultRef = useRef<HTMLDivElement>(null);
   const [diceDescription, setDiceDescription] = useState<string | null>(null);
+  
+  const lastDiceResult = useRef<number | string>(0);
+  const lastDiceDescription = useRef<string>('');
+  
+  const diceResultRef = useRef<HTMLDivElement>(null);
   const diceDescriptionRef = useRef<HTMLDivElement>(null);
-
   const diceVideo = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     if (!props.showDiceRoll) return;
 
     const style = getAttributeStyle(props.color);
-
     if (diceResultRef.current) {
       diceResultRef.current.style.color = style.color;
       diceResultRef.current.style.textShadow = style.textShadow;
     }
-
     if (diceDescriptionRef.current) {
       diceDescriptionRef.current.style.color = style.color;
       diceDescriptionRef.current.style.textShadow = style.textShadow;
     }
 
-    async function triggerRollAnimation(rollValue: number | string, description?: string) {
-      isAnimating.current = true;
+    async function processRoll(rollVal: number | string, desc?: string) {
+      isProcessing.current = true;
 
-      // 1. Mostra o container e dispara o vídeo do zero
+      // 1. Ativa a exibição no componente pai (mostra o container)
       props.onShowDice();
+
+      // 2. Reinicia e reproduz o vídeo do zero imediatamente
       if (diceVideo.current) {
         diceVideo.current.currentTime = 0;
         diceVideo.current.play().catch(() => {});
       }
 
-      // 2. Define o resultado imediatamente para aparecer junto com a animação
-      setDiceResult(rollValue);
-      setDiceDescription(description || null);
+      // 3. Atualiza os estados e os refs de fallback para o texto nunca falhar
+      lastDiceResult.current = rollVal;
+      setDiceResult(rollVal);
 
-      // 3. Mantém visível por 2 segundos
-      await sleep(2000);
+      if (desc) {
+        lastDiceDescription.current = desc;
+        setDiceDescription(desc);
+      } else {
+        lastDiceDescription.current = '';
+        setDiceDescription(null);
+      }
 
-      // 4. Esconde o resultado e o container
+      // 4. Mantém o dado visível durante o tempo da animação (2.2 segundos)
+      await sleep(2200);
+
+      // 5. Limpa os textos
       setDiceResult(null);
       setDiceDescription(null);
+
+      // 6. Oculta o container no componente pai
       props.onHideDice();
+      await sleep(500);
 
-      await sleep(300);
-
-      // 5. Processa o próximo da fila se houver
-      const next = diceQueue.current.shift();
+      // 7. Processa o próximo da fila se houver, ou liberta o estado
+      const next = queue.current.shift();
       if (next) {
-        triggerRollAnimation(next.roll, next.description);
+        processRoll(next.roll, next.description);
       } else {
-        isAnimating.current = false;
+        isProcessing.current = false;
       }
     }
+
+    const handleResultPayload = (payload: any) => {
+      if (payload.playerId !== props.playerId) return;
+      const { results, dices } = payload;
+      if (!results || results.length === 0) return;
+
+      let rollVal: number | string = '';
+      let desc: string | undefined = undefined;
+
+      if (results.length === 1) {
+        rollVal = results[0].roll;
+        desc = results[0].resultType?.description;
+      } else if (Array.isArray(dices)) {
+        rollVal = results.reduce((prev: number, cur: any) => prev + cur.roll, 0);
+      } else {
+        rollVal = results.map((d: any) => d.roll).join(' | ');
+        desc = results.map((d: any) => d.resultType?.description).filter(Boolean).join(' - ');
+      }
+
+      if (isProcessing.current) {
+        queue.current.push({ roll: rollVal, description: desc });
+      } else {
+        processRoll(rollVal, desc);
+      }
+    };
 
     const unsub1 = on('diceRoll', (payload) => {
       if (payload.playerId !== props.playerId) return;
@@ -87,36 +123,11 @@ export default function PortraitDiceContainer(props: {
       }
     });
 
-    const unsub2 = on('diceResult', (payload) => {
-      if (payload.playerId !== props.playerId) return;
-      const { results, dices } = payload;
+    const unsub2 = on('diceResult', handleResultPayload);
 
-      if (!results || results.length === 0) return;
-
-      let rollVal: number | string = '';
-      let desc: string | undefined = undefined;
-
-      if (results.length === 1) {
-        rollVal = results[0].roll;
-        desc = results[0].resultType?.description;
-      } else if (Array.isArray(dices)) {
-        rollVal = results.reduce((prev, cur) => prev + cur.roll, 0);
-      } else {
-        rollVal = results.map((d) => d.roll).join(' | ');
-        desc = results.map((d) => d.resultType?.description).filter(Boolean).join(' - ');
-      }
-
-      if (isAnimating.current) {
-        diceQueue.current.push({ roll: rollVal, description: desc });
-        return;
-      }
-
-      triggerRollAnimation(rollVal, desc);
-    });
-
-    return () => { 
-      unsub1?.(); 
-      unsub2?.(); 
+    return () => {
+      unsub1?.();
+      unsub2?.();
     };
   }, [props.showDiceRoll, props.playerId, props.color]);
 
@@ -146,10 +157,10 @@ export default function PortraitDiceContainer(props: {
         {(isDebugMode || diceResult !== null || diceDescription !== null) && (
           <div className={styles.diceTextGroup}>
             <div className={styles.result} ref={diceResultRef}>
-              {isDebugMode ? '42' : (diceResult ?? '')}
+              {isDebugMode ? '42' : (diceResult || lastDiceResult.current || '')}
             </div>
             <div className={styles.description} ref={diceDescriptionRef}>
-              {isDebugMode ? 'Crítico' : (diceDescription ?? '')}
+              {isDebugMode ? 'Crítico' : (diceDescription || lastDiceDescription.current || '')}
             </div>
           </div>
         )}

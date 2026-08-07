@@ -1,336 +1,224 @@
-import type { Equipment } from '@prisma/client';
-import { useContext, useEffect, useRef, useState } from 'react';
-import Button from 'react-bootstrap/Button';
-import Col from 'react-bootstrap/Col';
-import Row from 'react-bootstrap/Row';
-import Image from 'react-bootstrap/Image';
-import { ErrorLogger } from '../../contexts';
-import useRealtime from '../../hooks/useRealtime';
-import api from '../../utils/api';
-import CustomSpinner from '../CustomSpinner';
-import DataContainer from '../DataContainer';
-import AddDataModal from '../Modals/AddDataModal';
-import { resolveDices } from '../../utils/dice';
-import type { DiceRollEvent } from '../../hooks/useDiceRoll';
+import React, { useState } from 'react';
+import EquipmentEditorModal from '../Modals/EquipmentEditorModal';
 import DiceRollModal from '../Modals/DiceRollModal';
-import useDiceRoll from '../../hooks/useDiceRoll';
-import EquipmentEditorModal, { EquipmentWithDefect } from '../Modals/EquipmentEditorModal';
 
-type PlayerEquipmentContainerProps = {
-  title?: string;
-  playerEquipments: EquipmentWithDefect[];
-  availableEquipments: EquipmentWithDefect[];
-  npcId?: number;
-};
-
-export default function PlayerEquipmentContainer(props: PlayerEquipmentContainerProps) {
-  const [addEquipmentShow, setAddEquipmentShow] = useState(false);
-  const [availableEquipments, setAvailableEquipments] = useState<{ id: number; name: string }[]>(
-    props.availableEquipments
-  );
-  const [playerEquipments, setPlayerEquipments] = useState<EquipmentWithDefect[]>(
-    props.playerEquipments
-  );
-  const [loading, setLoading] = useState(false);
-
-  const [equipmentEditorModalShow, setEquipmentEditorModalShow] = useState(false);
-  const [equipmentEditorData, setEquipmentEditorData] = useState<EquipmentWithDefect | undefined>(undefined);
-  const [equipmentEditorOperation, setEquipmentEditorOperation] = useState<'create' | 'edit'>('create');
-
-  const logError = useContext(ErrorLogger);
-  const { on } = useRealtime();
-  const [diceRoll, rollDice] = useDiceRoll(props.npcId);
-
-  const socket_equipmentAdd = useRef<(id: number, name: string) => void>(() => {});
-  const socket_equipmentRemove = useRef<(id: number) => void>(() => {});
-  const socket_equipmentChange = useRef<(eq: EquipmentWithDefect) => void>(() => {});
-
-  useEffect(() => {
-    socket_equipmentAdd.current = (id, name) => {
-      if (availableEquipments.findIndex((eq) => eq.id === id) > -1) return;
-      setAvailableEquipments((equipments) => [...equipments, { id, name }]);
-    };
-
-    socket_equipmentRemove.current = (id) => {
-      const index = playerEquipments.findIndex((equipment) => equipment.id === id);
-      if (index === -1) return;
-      setPlayerEquipments((equipment) => {
-        const newEquipments = [...equipment];
-        newEquipments.splice(index, 1);
-        return newEquipments;
-      });
-    };
-
-    socket_equipmentChange.current = (eq) => {
-      const availableIndex = availableEquipments.findIndex((_eq) => _eq.id === eq.id);
-      const playerIndex = playerEquipments.findIndex((_eq) => _eq.id === eq.id);
-
-      if (eq.visible) {
-        if (availableIndex === -1 && playerIndex === -1)
-          return setAvailableEquipments((equipments) => [...equipments, eq]);
-      } else if (availableIndex > -1) {
-        return setAvailableEquipments((equipments) => {
-          const newEquipments = [...equipments];
-          newEquipments.splice(availableIndex, 1);
-          return newEquipments;
-        });
-      }
-
-      if (availableIndex > -1) {
-        setAvailableEquipments((equipments) => {
-          const newEquipments = [...equipments];
-          newEquipments[availableIndex] = eq;
-          return newEquipments;
-        });
-        return;
-      }
-
-      if (playerIndex === -1) return;
-
-      setPlayerEquipments((equipments) => {
-        const newEquipments = [...equipments];
-        newEquipments[playerIndex] = eq;
-        return newEquipments;
-      });
-    };
+export default function PlayerEquipmentContainer({
+  playerEquipment = [],
+  playerId,
+  onUpdate,
+}: {
+  playerEquipment: any[];
+  playerId: number;
+  onUpdate?: () => void;
+}) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedEquipment, setSelectedEquipment] = useState<any | null>(null);
+  const [diceModalData, setDiceModalData] = useState<{
+    isOpen: boolean;
+    title: string;
+    formula: string;
+  }>({
+    isOpen: false,
+    title: '',
+    formula: '',
   });
 
-  useEffect(() => {
-    const unsubs: (() => void)[] = [];
-    unsubs.push(on('equipmentAdd', (payload) => socket_equipmentAdd.current(payload.id, payload.name)));
-    unsubs.push(on('equipmentRemove', (payload) => socket_equipmentRemove.current(payload.id)));
-    unsubs.push(on('equipmentChange', (payload) => socket_equipmentChange.current(payload.equipment)));
-    return () => { unsubs.forEach((u) => u()); };
-  }, [on]);
-
-  function onEquipmentCreateSubmit(equipment: EquipmentWithDefect) {
-    setLoading(true);
-    api
-      .put('/sheet/equipment', equipment)
-      .then((res) => {
-        return api.put('/sheet/player/equipment', { id: res.data.id, npcId: props.npcId });
-      })
-      .then((res) => {
-        const newEquipment = res.data.equipment as EquipmentWithDefect;
-        setPlayerEquipments([...playerEquipments, { ...newEquipment, defeito: equipment.defeito || '' }]);
-        setEquipmentEditorModalShow(false);
-      })
-      .catch(logError)
-      .finally(() => setLoading(false));
-  }
-
-  function onEquipmentEditSubmit(equipment: EquipmentWithDefect) {
-    setLoading(true);
-    api
-      .post('/sheet/equipment', equipment)
-      .then(() => {
-        setPlayerEquipments((prev) =>
-          prev.map((eq) => (eq.id === equipment.id ? equipment : eq))
-        );
-        setEquipmentEditorModalShow(false);
-      })
-      .catch(logError)
-      .finally(() => setLoading(false));
-  }
-
-  function onAddEquipment(id: number) {
-    setLoading(true);
-    api
-      .put('/sheet/player/equipment', { id, npcId: props.npcId })
-      .then((res) => {
-        const equipment = res.data.equipment as EquipmentWithDefect;
-        setPlayerEquipments([...playerEquipments, equipment]);
-
-        const newEquipments = [...availableEquipments];
-        newEquipments.splice(
-          newEquipments.findIndex((eq) => eq.id === id),
-          1
-        );
-        setAvailableEquipments(newEquipments);
-      })
-      .catch(logError)
-      .finally(() => {
-        setAddEquipmentShow(false);
-        setLoading(false);
+  // Função para deletar arma/equipamento
+  const handleDelete = async (id: number) => {
+    if (!confirm('Tem certeza que deseja apagar este equipamento?')) return;
+    try {
+      const res = await fetch(`/api/player/${playerId}/equipment/${id}`, {
+        method: 'DELETE',
       });
-  }
-
-  function onDeleteEquipment(id: number) {
-    const newPlayerEquipments = [...playerEquipments];
-    const index = newPlayerEquipments.findIndex((equipment) => equipment.id === id);
-    if (index > -1) {
-      const removed = newPlayerEquipments[index];
-      newPlayerEquipments.splice(index, 1);
-      setPlayerEquipments(newPlayerEquipments);
-      setAvailableEquipments((prev) => [...prev, { id: removed.id, name: removed.name }]);
+      if (res.ok && onUpdate) {
+        onUpdate();
+      }
+    } catch (error) {
+      console.error('Erro ao deletar equipamento:', error);
     }
-  }
+  };
+
+  // Função para abrir rolagem de ataque/dano
+  const handleOpenDiceModal = (name: string, damage: string) => {
+    if (!damage || damage === '-') return;
+    setDiceModalData({
+      isOpen: true,
+      title: `Ataque / Dano - ${name}`,
+      formula: damage,
+    });
+  };
+
+  // Função para atualizar munição
+  const handleAmmoChange = async (id: number, currentAmmo: number) => {
+    try {
+      await fetch(`/api/player/${playerId}/equipment/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ammo: currentAmmo }),
+      });
+      if (onUpdate) onUpdate();
+    } catch (error) {
+      console.error('Erro ao atualizar munição:', error);
+    }
+  };
 
   return (
-    <>
-      <DataContainer
-        outline
-        title={props.title || 'Combate'}
-        addButton={{ onAdd: () => setAddEquipmentShow(true), disabled: loading }}>
-        <Row className='mb-3 justify-content-center'>
-          <Col xs='auto'>
-            <Button
-              size='sm'
-              variant='secondary'
-              onClick={() => {
-                setEquipmentEditorData(undefined);
-                setEquipmentEditorOperation('create');
-                setEquipmentEditorModalShow(true);
-              }}
-            >
-              + Criar Arma Customizada
-            </Button>
-          </Col>
-        </Row>
+    <div className="w-full bg-black/40 border border-purple-900/40 rounded-lg p-4 text-white">
+      {/* Cabeçalho */}
+      <div className="flex justify-between items-center border-b border-purple-800/40 pb-3 mb-4">
+        <h2 className="text-xl font-bold tracking-wider text-purple-300 uppercase">
+          Combate
+        </h2>
+        <button
+          onClick={() => {
+            setSelectedEquipment(null);
+            setIsModalOpen(true);
+          }}
+          className="bg-purple-700 hover:bg-purple-600 text-white font-semibold px-4 py-2 rounded transition shadow-md text-sm"
+        >
+          + CRIAR EQUIPAMENTO CUSTOMIZADO
+        </button>
+      </div>
 
-        <Row>
-          {playerEquipments.map((equipment) => (
-            <PlayerEquipmentField
-              key={equipment.id}
-              equipment={equipment}
-              onDelete={onDeleteEquipment}
-              showDiceRollResult={rollDice}
-              npcId={props.npcId}
-              onEditBase={() => {
-                setEquipmentEditorData(equipment);
-                setEquipmentEditorOperation('edit');
-                setEquipmentEditorModalShow(true);
-              }}
-            />
-          ))}
-        </Row>
-      </DataContainer>
-      <AddDataModal
-        title='Adicionar Equipamento'
-        show={addEquipmentShow}
-        onHide={() => setAddEquipmentShow(false)}
-        data={availableEquipments}
-        onAddData={onAddEquipment}
-        disabled={loading}
-      />
-      <EquipmentEditorModal
-        show={equipmentEditorModalShow}
-        onHide={() => setEquipmentEditorModalShow(false)}
-        data={equipmentEditorData as EquipmentWithDefect}
-        operation={equipmentEditorOperation}
-        onSubmit={(equipment) => {
-          if (equipmentEditorOperation === 'create') onEquipmentCreateSubmit(equipment);
-          else onEquipmentEditSubmit(equipment);
-        }}
-        disabled={loading}
-      />
-      <DiceRollModal {...diceRoll} />
-    </>
-  );
-}
+      {/* Tabela de Equipamentos / Armas (Estilo Foto 2) */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-center border-collapse">
+          <thead>
+            <tr className="bg-purple-950/60 border-b border-purple-800/60 text-xs uppercase tracking-wider text-purple-200">
+              <th className="py-3 px-2">Ações</th>
+              <th className="py-3 px-2">Nome</th>
+              <th className="py-3 px-2">Tipo</th>
+              <th className="py-3 px-2">Dano</th>
+              <th className="py-3 px-2">Alcance</th>
+              <th className="py-3 px-2">Ataques</th>
+              <th className="py-3 px-2">Mun. Atual</th>
+              <th className="py-3 px-2">Mun. Máxima</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-purple-900/30 text-sm">
+            {playerEquipment && playerEquipment.length > 0 ? (
+              playerEquipment.map((item) => (
+                <React.Fragment key={item.id}>
+                  <tr className="hover:bg-purple-900/20 transition-colors">
+                    {/* Botões de Ação (Apagar / Editar) */}
+                    <td className="py-3 px-2 flex justify-center items-center gap-2">
+                      <button
+                        onClick={() => handleDelete(item.id)}
+                        title="Apagar equipamento"
+                        className="bg-red-800/80 hover:bg-red-700 text-white p-1.5 rounded transition"
+                      >
+                        🗑️
+                      </button>
+                    </td>
 
-type PlayerEquipmentFieldProps = {
-  equipment: EquipmentWithDefect;
-  onDelete: (id: number) => void;
-  showDiceRollResult: DiceRollEvent;
-  onEditBase: () => void;
-  npcId?: number;
-};
+                    {/* Nome (Clicável para editar) */}
+                    <td className="py-3 px-2 font-bold text-purple-300">
+                      <button
+                        onClick={() => {
+                          setSelectedEquipment(item);
+                          setIsModalOpen(true);
+                        }}
+                        className="hover:underline hover:text-purple-200 uppercase"
+                      >
+                        {item.name || 'Sem Nome'}
+                      </button>
+                    </td>
 
-function PlayerEquipmentField({
-  equipment,
-  onDelete,
-  showDiceRollResult,
-  onEditBase,
-  npcId
-}: PlayerEquipmentFieldProps) {
-  const logError = useContext(ErrorLogger);
-  const [loading, setLoading] = useState(false);
+                    {/* Tipo */}
+                    <td className="py-3 px-2 text-gray-300 uppercase">
+                      {item.type || '-'}
+                    </td>
 
-  function deleteEquipment() {
-    if (!confirm('Tem certeza que deseja apagar essa arma/equipamento?')) return;
-    setLoading(true);
-    api
-      .delete('/sheet/player/equipment', { data: { id: equipment.id, npcId } })
-      .then(() => {
-        onDelete(equipment.id);
-      })
-      .catch(logError)
-      .finally(() => setLoading(false));
-  }
+                    {/* Dano */}
+                    <td className="py-3 px-2 font-semibold text-purple-200">
+                      {item.damage || '-'}
+                    </td>
 
-  function diceRoll() {
-    const aux = resolveDices(equipment.damage);
-    if (aux) showDiceRollResult({ dices: aux, broadcast: false });
-  }
+                    {/* Alcance */}
+                    <td className="py-3 px-2 text-gray-300">
+                      {item.range || '-'}
+                    </td>
 
-  return (
-    <Col xs={12} className='mb-3 w-100 text-center'>
-      <Row>
-        <Col className='data-container mx-3 py-3'>
-          <Row className='mb-2 align-items-center justify-content-center'>
-            <Col xs='auto'>
-              <span
-                className='h2 me-3'
-                onDoubleClick={onEditBase}
-                title="Dê um duplo clique para editar este equipamento"
-                style={{ cursor: 'pointer', color: '#ddaf0f', textDecoration: 'underline' }}
-              >
-                {equipment.name}
-              </span>
-              <Button
-                aria-label='Apagar'
-                variant='secondary'
-                size='sm'
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteEquipment();
-                }}
-                disabled={loading}>
-                {loading ? <CustomSpinner /> : 'Apagar'}
-              </Button>
-            </Col>
-          </Row>
-          <Row className='mb-2'>
-            <Col>Tipo: {equipment.type || '-'}</Col>
-          </Row>
-          <Row className='mb-2'>
-            <Col>
-              <span className='me-1'>Dano: {equipment.damage || '-'} </span>
-              {equipment.damage && equipment.damage !== '-' && (
-                <Image
-                  alt='Dado'
-                  src='/dice20.png'
-                  className='clickable'
-                  onClick={diceRoll}
-                  style={{ maxHeight: '2rem' }}
-                />
-              )}
-            </Col>
-          </Row>
-          <Row className='mb-2'>
-            <Col>Alcance: {equipment.range || '-'}</Col>
-          </Row>
-          <Row className='mb-2'>
-            <Col>Ataques: {equipment.attacks || '-'}</Col>
-          </Row>
+                    {/* Botão de Rolagem de Dado (Ataques) */}
+                    <td className="py-3 px-2">
+                      <button
+                        onClick={() => handleOpenDiceModal(item.name, item.damage)}
+                        className="bg-purple-900/60 hover:bg-purple-800 text-white p-2 rounded-full inline-flex items-center justify-center transition shadow"
+                        title="Rolar Dano / Ataque"
+                      >
+                        🎲
+                      </button>
+                    </td>
 
-          {equipment.defeito && equipment.defeito !== '-' && (
-            <Row className='mb-2'>
-              <Col style={{ color: '#ff6b6b', fontWeight: 'bold' }}>
-                Defeito: {equipment.defeito}
-              </Col>
-            </Row>
-          )}
+                    {/* Munição Atual (Input interativo) */}
+                    <td className="py-3 px-2">
+                      <input
+                        type="number"
+                        min={0}
+                        defaultValue={item.currentAmmo ?? 0}
+                        onBlur={(e) =>
+                          handleAmmoChange(item.id, parseInt(e.target.value) || 0)
+                        }
+                        className="w-16 bg-black/60 border border-purple-700 rounded text-center text-white py-1 text-xs focus:outline-none focus:border-purple-400"
+                      />
+                    </td>
 
-          <Row className='mb-2'>
-            <Col>Munição: {equipment.ammo ?? 0}</Col>
-          </Row>
-          <Row className='mb-2'>
-            <Col>Espaços: {equipment.slots ?? 0}</Col>
-          </Row>
-        </Col>
-      </Row>
-    </Col>
+                    {/* Munição Máxima */}
+                    <td className="py-3 px-2 text-gray-300">
+                      {item.ammo ?? '-'}
+                    </td>
+                  </tr>
+
+                  {/* Linha extra para exibir o Defeito (caso preenchido) */}
+                  {item.defeito && item.defeito.trim() !== '' && (
+                    <tr className="bg-purple-950/20 text-xs text-purple-300/80">
+                      <td colSpan={8} className="py-1.5 px-4 text-left italic border-b border-purple-900/20">
+                        <span className="font-semibold text-purple-400">Defeito:</span> {item.defeito}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={8} className="py-8 text-center text-gray-400 italic">
+                  Nenhum equipamento ou arma cadastrada no momento.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Modal de Criação / Edição */}
+      {isModalOpen && (
+        <EquipmentEditorModal
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            setSelectedEquipment(null);
+          }}
+          playerId={playerId}
+          equipment={selectedEquipment}
+          onSuccess={() => {
+            setIsModalOpen(false);
+            setSelectedEquipment(null);
+            if (onUpdate) onUpdate();
+          }}
+        />
+      )}
+
+      {/* Modal de Rolagem de Dado */}
+      {diceModalData.isOpen && (
+        <DiceRollModal
+          isOpen={diceModalData.isOpen}
+          onClose={() =>
+            setDiceModalData({ isOpen: false, title: '', formula: '' })
+          }
+          title={diceModalData.title}
+          formula={diceModalData.formula}
+        />
+      )}
+    </div>
   );
 }

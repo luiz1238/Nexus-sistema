@@ -31,7 +31,6 @@ export default function PlayerSpellContainer(props: PlayerSpellContainerProps) {
   const [playerSpells, setPlayerSpells] = useState<RitualData[]>(props.playerSpells);
   const [loading, setLoading] = useState(false);
 
-  // Estados do Modal de Edição/Criação
   const [spellEditorModalShow, setSpellEditorModalShow] = useState(false);
   const [spellEditorData, setSpellEditorData] = useState<RitualData | undefined>(undefined);
   const [spellEditorOperation, setSpellEditorOperation] = useState<'create' | 'edit'>('create');
@@ -122,10 +121,15 @@ export default function PlayerSpellContainer(props: PlayerSpellContainerProps) {
     setLoading(true);
     api
       .post('/sheet/spell', spell)
+      .then(() => {
+        setPlayerSpells((prev) =>
+          prev.map((sp) => (sp.id === spell.id ? spell : sp))
+        );
+        setSpellEditorModalShow(false);
+      })
       .catch(logError)
       .finally(() => {
         setLoading(false);
-        setSpellEditorModalShow(false);
       });
   }
 
@@ -154,12 +158,10 @@ export default function PlayerSpellContainer(props: PlayerSpellContainerProps) {
   function onDeleteSpell(id: number) {
     const newPlayerSpells = [...playerSpells];
     const index = newPlayerSpells.findIndex((spell) => spell.id === id);
-
-    newPlayerSpells.splice(index, 1);
-    setPlayerSpells(newPlayerSpells);
-
-    const modalSpell = { id, name: playerSpells[index].name };
-    setAvailableSpells([...availableSpells, modalSpell]);
+    if (index > -1) {
+      newPlayerSpells.splice(index, 1);
+      setPlayerSpells(newPlayerSpells);
+    }
   }
 
   return (
@@ -266,7 +268,7 @@ function PlayerSpellField({
     <Col xs={12} className='mb-3 w-100 text-center'>
       <Row>
         <Col className='data-container mx-3'>
-          {/* Exibe o Símbolo do Ritual se houver URL */}
+          {/* Exibe a foto/Símbolo do Ritual caso exista */}
           {spell.symbol && spell.symbol !== '-' && (
             <Row className='mt-2 justify-content-center'>
               <Col xs='auto'>
@@ -309,18 +311,21 @@ function PlayerSpellField({
           <Row className='mb-2'>
             <Col>Custo: {spell.cost}</Col>
           </Row>
-          {spell.sanity && (
+          {spell.sanity && spell.sanity !== '-' && (
             <Row className='mb-2'>
               <Col>Sanidade: {spell.sanity}</Col>
             </Row>
           )}
+
+          {/* CAMPO ELEMENTO DE VOLTA NA FICHA */}
           <Row className='mb-2'>
-            <Col>Elemento / Tipo: {spell.type}</Col>
+            <Col>Elemento: {spell.type || '-'}</Col>
           </Row>
+
           <Row className='mb-2'>
             <Col>
               <span className='me-1'>Dano / Efeito: {spell.damage} </span>
-              {spell.damage !== '-' && (
+              {spell.damage && spell.damage !== '-' && (
                 <Image
                   alt='Dado'
                   src='/dice20.png'

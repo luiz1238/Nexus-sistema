@@ -39,7 +39,7 @@ export default function PortraitAvatar(props: {
   const [attributeStatus, setAttributeStatus] = useState(props.attributeStatus);
   const previousStatusID = useRef(Number.MAX_SAFE_INTEGER);
 
-  // Estado que armazena a cor do brilho no Portrait
+  // Armazena a cor ativa do brilho
   const [highlightColor, setHighlightColor] = useState<string | null>(null);
 
   const { on } = useRealtime();
@@ -61,7 +61,6 @@ export default function PortraitAvatar(props: {
   }, []);
 
   useEffect(() => {
-    // 1. Escuta alterações de status na ficha do personagem
     const unsubStatus = on('playerAttributeStatusChange', (payload) => {
       if (payload.playerId !== props.playerId) return;
       const newStatus = [...attributeStatus];
@@ -94,7 +93,7 @@ export default function PortraitAvatar(props: {
       }
     });
 
-    // 2. Escuta quando o mestre clica em uma ficha na aba de Combate
+    // Escuta o comando do Mestre para destacar o personagem
     const unsubHighlight = on('portraitHighlight', (payload) => {
       if (payload.playerId === props.playerId) {
         setHighlightColor(payload.color || '#ddaf0f');
@@ -121,24 +120,20 @@ export default function PortraitAvatar(props: {
       playerId={props.playerId}
     >
       <Fade in={showAvatar || !!props.debug}>
-        <div
-          style={{
-            width: '100%',
-            height: '100%',
-            background: props.debug ? 'rgba(80,40,120,0.2)' : 'transparent',
-            // Aplica o efeito de aura brilhante (neon) quando o personagem for selecionado
-            filter: highlightColor
-              ? `drop-shadow(0 0 15px ${highlightColor}) drop-shadow(0 0 30px ${highlightColor})`
-              : 'none',
-            transition: 'filter 0.4s ease-in-out',
-          }}
-        >
+        <div style={{ width: '100%', height: '100%', background: props.debug ? 'rgba(80,40,120,0.2)' : 'transparent' }}>
           <Image
             src={src}
             alt="Avatar"
             onError={() => setSrc('/avatar404.png')}
             onLoad={() => setShowAvatar(true)}
             className={styles.avatar}
+            style={{
+              // Aplica o brilho diretamente na silhueta da foto do personagem
+              filter: highlightColor
+                ? `drop-shadow(0 0 20px ${highlightColor}) drop-shadow(0 0 45px ${highlightColor})`
+                : undefined,
+              transition: 'filter 0.4s ease-in-out',
+            }}
           />
         </div>
       </Fade>

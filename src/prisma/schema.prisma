@@ -230,9 +230,6 @@ model Equipment {
   NPCEquipment    NPCEquipment[]
 }
 
-  @@id([player_id, equipment_id])
-}
-
 model PlayerItem {
   Player             Player @relation(fields: [player_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
   player_id          Int

@@ -23,16 +23,22 @@ type SortableContainerProps = {
   entities: Entity[];
   pointer: number;
   removeEntity: (id: number) => void;
+  highlightEntity: (id: number) => void;
 };
 
 const style = { maxWidth: '4rem' };
 
-// Função responsável por acender ou apagar o brilho do Portrait no OBS
 function handleHighlight(playerId: number | null, color?: string) {
-  api.post('/portrait/highlight', {
+  api.post('/portrait/portraitHighlight', {
     playerId,
     color: color || '#ddaf0f',
-  }).catch((err) => console.error(err));
+  }).catch(() => {
+    // Tenta a rota em api/portrait/highlight caso a anterior falhe
+    api.post('/portrait/highlight', {
+      playerId,
+      color: color || '#ddaf0f',
+    }).catch((err) => console.error(err));
+  });
 }
 
 const SortableList = SortableContainer((props: SortableContainerProps) => {
@@ -45,6 +51,7 @@ const SortableList = SortableContainer((props: SortableContainerProps) => {
           entity={entity}
           selected={props.pointer === index}
           removeEntity={props.removeEntity}
+          highlightEntity={props.highlightEntity}
         />
       ))}
     </ListGroup>
@@ -55,24 +62,33 @@ type SortableElementProps = {
   entity: Entity;
   selected?: boolean;
   removeEntity: (id: number) => void;
+  highlightEntity: (id: number) => void;
 };
 
 const SortableItem = SortableElement((props: SortableElementProps) => {
   return (
     <ListGroup.Item className={props.selected ? 'selected' : ''}>
-      <div
-        className="d-inline-block"
-        onClick={() => handleHighlight(props.entity.id)}
-        style={{ cursor: 'pointer', fontWeight: 'bold' }}
-        title="Clique para destacar o Portrait na live"
-      >
-        {props.entity.name || 'Desconhecido'}
-      </div>
+      <div className="d-inline-block">{props.entity.name || 'Desconhecido'}</div>
       <BottomTextInput className="mx-2 text-center" defaultValue="0" style={style} />
       <Button
         size="sm"
+        variant="outline-warning"
+        className="me-1"
+        title="Ativar brilho do personagem na live"
+        onClick={(e) => {
+          e.stopPropagation();
+          props.highlightEntity(props.entity.id);
+        }}
+      >
+        ✨
+      </Button>
+      <Button
+        size="sm"
         variant="secondary"
-        onClick={() => props.removeEntity(props.entity.id)}
+        onClick={(e) => {
+          e.stopPropagation();
+          props.removeEntity(props.entity.id);
+        }}
       >
         -
       </Button>
@@ -232,6 +248,7 @@ export default function CombatContainer(props: {
               onSortEnd={onSortEnd}
               pointer={pointer}
               removeEntity={removeEntity}
+              highlightEntity={(id) => handleHighlight(id)}
             />
           </div>
         </Col>
@@ -244,7 +261,7 @@ export default function CombatContainer(props: {
         </Col>
         <Col>
           <Button size="sm" variant="secondary" onClick={emptyList}>
-            Limpar Lista
+            Limpar
           </Button>
         </Col>
         <Col>

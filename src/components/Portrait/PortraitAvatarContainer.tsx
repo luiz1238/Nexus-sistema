@@ -116,3 +116,43 @@ export default function PortraitAvatar(props: {
     </PortraitDraggableResizable>
   );
 }
+// src/components/Portrait/PortraitAvatarContainer.tsx
+import { useEffect, useState } from 'react';
+import useRealtime from '../../hooks/useRealtime';
+
+// Dentro do seu componente PortraitAvatarContainer:
+export default function PortraitAvatarContainer(props: PortraitAvatarContainerProps) {
+  const [highlightColor, setHighlightColor] = useState<string | null>(null);
+  const { on } = useRealtime();
+
+  useEffect(() => {
+    // Escuta quando o mestre clica no nome no combate
+    const unsub = on('portraitHighlight', (payload) => {
+      if (payload.playerId !== props.playerId) return;
+
+      setHighlightColor(payload.color || '#ddaf0f');
+
+      // O brilho permanece por 2.5 segundos e depois apaga suavemente
+      setTimeout(() => {
+        setHighlightColor(null);
+      }, 2500);
+    });
+
+    return () => { unsub?.(); };
+  }, [on, props.playerId]);
+
+  return (
+    <div
+      style={{
+        // Aplica um filtro de brilho neon suave com a cor da ficha quando ativado
+        filter: highlightColor
+          ? `drop-shadow(0 0 15px ${highlightColor}) drop-shadow(0 0 30px ${highlightColor})`
+          : 'none',
+        transition: 'filter 0.4s ease-in-out',
+      }}
+    >
+      {/* Imagem do Avatar / Elementos do Portrait */}
+    </div>
+  );
+}
+

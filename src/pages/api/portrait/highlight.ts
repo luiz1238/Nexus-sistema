@@ -16,6 +16,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   const { playerId, color } = req.body;
 
+  // Transmite o ID do personagem selecionado (ou null quando clicar em "Limpar Brilho")
   broadcast('portraitHighlight', {
     playerId: playerId ?? null,
     color: color || '#ddaf0f',

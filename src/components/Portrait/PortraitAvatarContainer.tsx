@@ -39,12 +39,11 @@ export default function PortraitAvatar(props: {
   const [attributeStatus, setAttributeStatus] = useState(props.attributeStatus);
   const previousStatusID = useRef(Number.MAX_SAFE_INTEGER);
 
-  // Estado da cor do brilho (destaque no combate)
+  // Estado que armazena a cor do brilho no Portrait
   const [highlightColor, setHighlightColor] = useState<string | null>(null);
 
   const { on } = useRealtime();
 
-  // Carrega o avatar inicial
   useEffect(() => {
     const id = attributeStatus.find((stat) => stat.value)?.attribute_status_id || 0;
     previousStatusID.current = id;
@@ -61,9 +60,8 @@ export default function PortraitAvatar(props: {
       });
   }, []);
 
-  // Escuta alteração de status do personagem e escuta o evento de brilho (highlight)
   useEffect(() => {
-    // 1. Escuta troca de status (ex: ferido, sangrando, etc)
+    // 1. Escuta alterações de status na ficha do personagem
     const unsubStatus = on('playerAttributeStatusChange', (payload) => {
       if (payload.playerId !== props.playerId) return;
       const newStatus = [...attributeStatus];
@@ -96,7 +94,7 @@ export default function PortraitAvatar(props: {
       }
     });
 
-    // 2. Escuta destaque/brilho disparado pelo painel de combate do Mestre
+    // 2. Escuta quando o mestre clica em uma ficha na aba de Combate
     const unsubHighlight = on('portraitHighlight', (payload) => {
       if (payload.playerId === props.playerId) {
         setHighlightColor(payload.color || '#ddaf0f');
@@ -128,7 +126,7 @@ export default function PortraitAvatar(props: {
             width: '100%',
             height: '100%',
             background: props.debug ? 'rgba(80,40,120,0.2)' : 'transparent',
-            // Aplica a aura brilhante Neon se highlightColor estiver definido
+            // Aplica o efeito de aura brilhante (neon) quando o personagem for selecionado
             filter: highlightColor
               ? `drop-shadow(0 0 15px ${highlightColor}) drop-shadow(0 0 30px ${highlightColor})`
               : 'none',

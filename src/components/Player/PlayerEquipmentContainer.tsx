@@ -1,198 +1,653 @@
-import React, { useState } from 'react';
-import EquipmentEditorModal from '../Modals/EquipmentEditorModal';
+import type { Equipment, PlayerEquipment } from '@prisma/client';
+import type { FormEvent } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import Button from 'react-bootstrap/Button';
+import Col from 'react-bootstrap/Col';
+import Image from 'react-bootstrap/Image';
+import Row from 'react-bootstrap/Row';
+import Table from 'react-bootstrap/Table';
+import { BsTrash } from 'react-icons/bs';
+import { FaHandHolding, FaHandsHelping } from 'react-icons/fa';
+import { ErrorLogger } from '../../contexts';
+import type { DiceRollEvent } from '../../hooks/useDiceRoll';
+import useDiceRoll from '../../hooks/useDiceRoll';
+import useExtendedState from '../../hooks/useExtendedState';
+import useRealtime from '../../hooks/useRealtime';
+import api from '../../utils/api';
+import { resolveDices } from '../../utils/dice';
+import BottomTextInput from '../BottomTextInput';
+import CustomSpinner from '../CustomSpinner';
+import DataContainer from '../DataContainer';
+import AddDataModal from '../Modals/AddDataModal';
 import DiceRollModal from '../Modals/DiceRollModal';
+import PlayerTradeModal from '../Modals/PlayerTradeModal';
+import type { Trade } from '../Modals/PlayerTradeModal';
+import EquipmentEditorModal from '../Modals/EquipmentEditorModal';
 
-export default function PlayerEquipmentContainer({
-  playerEquipment = [],
-  playerId,
-  onUpdate,
-}: {
-  playerEquipment: any[];
-  playerId: number;
-  onUpdate?: () => void;
-}) {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedEquipment, setSelectedEquipment] = useState<any | null>(null);
-  const [diceModalData, setDiceModalData] = useState<{
-    isOpen: boolean;
-    title: string;
-    formula: string;
-  }>({
-    isOpen: false,
-    title: '',
-    formula: '',
-  });
+type PlayerEquipmentContainerProps = {
+	playerEquipments: {
+		currentAmmo: number;
+		Equipment: Equipment;
+	}[];
+	availableEquipments: Equipment[];
+	title: string;
+	npcId?: number;
+	partners?: {
+		id: number;
+		name: string;
+	}[];
+};
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Tem certeza que deseja apagar este equipamento?')) return;
-    try {
-      const res = await fetch(`/api/player/${playerId}/equipment/${id}`, {
-        method: 'DELETE',
-      });
-      if (res.ok && onUpdate) {
-        onUpdate();
-      }
-    } catch (error) {
-      console.error('Erro ao deletar equipamento:', error);
-    }
-  };
+const tradeInitialValue: Trade<Equipment> = {
+	type: 'equipment',
+	show: false,
+	offer: { id: 0, name: '' } as Equipment,
+	donation: true,
+};
 
-  const handleOpenDiceModal = (name: string, damage: string) => {
-    if (!damage || damage === '-') return;
-    setDiceModalData({
-      isOpen: true,
-      title: `Ataque / Dano - ${name}`,
-      formula: damage,
-    });
-  };
+const tradeTimeLimit = 10000;
 
-  const handleAmmoChange = async (id: number, currentAmmo: number) => {
-    try {
-      await fetch(`/api/player/${playerId}/equipment/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ammo: currentAmmo }),
-      });
-      if (onUpdate) onUpdate();
-    } catch (error) {
-      console.error('Erro ao atualizar munição:', error);
-    }
-  };
+export default function PlayerEquipmentContainer(props: PlayerEquipmentContainerProps) {
+	const [diceRollResultModalProps, onDiceRoll] = useDiceRoll(props.npcId);
 
-  return (
-    <div className="w-full bg-black/40 border border-purple-900/40 rounded-lg p-4 text-white">
-      <div className="flex justify-between items-center border-b border-purple-800/40 pb-3 mb-4">
-        <h2 className="text-xl font-bold tracking-wider text-purple-300 uppercase">
-          Combate
-        </h2>
-        <button
-          onClick={() => {
-            setSelectedEquipment(null);
-            setIsModalOpen(true);
-          }}
-          className="bg-purple-700 hover:bg-purple-600 text-white font-semibold px-4 py-2 rounded transition shadow-md text-sm"
-        >
-          + CRIAR EQUIPAMENTO CUSTOMIZADO
-        </button>
-      </div>
+	const [addEquipmentShow, setAddEquipmentShow] = useState(false);
+	const[loading, setLoading] = useState(false);
+	const [availableEquipments, setAvailableEquipments] = useState<
+		{ id: number; name: string }[]
+	>(props.availableEquipments);
+	const[playerEquipments, setPlayerEquipments] = useState(props.playerEquipments);
+	const[trade, setTrade] = useState<Trade<Equipment>>(tradeInitialValue);
+	const currentTradeId = useRef<number | null>(null);
+	const tradeTimeout = useRef<NodeJS.Timeout | null>(null);
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-center border-collapse">
-          <thead>
-            <tr className="bg-purple-950/60 border-b border-purple-800/60 text-xs uppercase tracking-wider text-purple-200">
-              <th className="py-3 px-2">Ações</th>
-              <th className="py-3 px-2">Nome</th>
-              <th className="py-3 px-2">Tipo</th>
-              <th className="py-3 px-2">Dano</th>
-              <th className="py-3 px-2">Alcance</th>
-              <th className="py-3 px-2">Ataques</th>
-              <th className="py-3 px-2">Mun. Atual</th>
-              <th className="py-3 px-2">Mun. Máxima</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-purple-900/30 text-sm">
-            {playerEquipment && playerEquipment.length > 0 ? (
-              playerEquipment.map((item) => (
-                <tr key={item.id} className="hover:bg-purple-900/20 transition-colors">
-                  <td className="py-3 px-2 flex justify-center items-center gap-2">
-                    <button
-                      onClick={() => handleDelete(item.id)}
-                      title="Apagar equipamento"
-                      className="bg-red-800/80 hover:bg-red-700 text-white p-1.5 rounded transition"
-                    >
-                      🗑️
-                    </button>
-                  </td>
+	// Estados do Modal de Edição/Criação
+	const[equipEditorModalShow, setEquipEditorModalShow] = useState(false);
+	const [equipEditorData, setEquipEditorData] = useState<Equipment | undefined>(undefined);
+	const [equipEditorOperation, setEquipEditorOperation] = useState<'create' | 'edit'>('create');
 
-                  <td className="py-3 px-2 font-bold text-purple-300">
-                    <button
-                      onClick={() => {
-                        setSelectedEquipment(item);
-                        setIsModalOpen(true);
-                      }}
-                      className="hover:underline hover:text-purple-200 uppercase"
-                    >
-                      {item.name || 'Sem Nome'}
-                    </button>
-                  </td>
+  const { on } = useRealtime();
+  const logError = useContext(ErrorLogger);
 
-                  <td className="py-3 px-2 text-gray-300 uppercase">
-                    {item.type || '-'}
-                  </td>
+  const socket_equipmentAdd = useRef<(id: number, name: string) => void>(() => {});
+  const socket_equipmentRemove = useRef<(id: number) => void>(() => {});
+  const socket_equipmentChange = useRef<(eq: Equipment) => void>(() => {});
+  const socket_requestReceived = useRef<(type: string, tradeId: number, receiverObjectId: number | null, senderName: string, equipmentName: string) => void>(() => {});
+  const socket_responseReceived = useRef<(accept: boolean, tradeRes?: any) => void>(() => {});
 
-                  <td className="py-3 px-2 font-semibold text-purple-200">
-                    {item.damage || '-'}
-                  </td>
+	useEffect(() => {
+		socket_equipmentAdd.current = (id, name) => {
+			if (availableEquipments.findIndex((eq) => eq.id === id) > -1) return;
+			setAvailableEquipments((equipments) => [...equipments, { id, name }]);
+		};
 
-                  <td className="py-3 px-2 text-gray-300">
-                    {item.range || '-'}
-                  </td>
+		socket_equipmentRemove.current = (id) => {
+			const index = playerEquipments.findIndex((eq) => eq.Equipment.id === id);
+			if (index === -1) return;
 
-                  <td className="py-3 px-2">
-                    <button
-                      onClick={() => handleOpenDiceModal(item.name, item.damage)}
-                      className="bg-purple-900/60 hover:bg-purple-800 text-white p-2 rounded-full inline-flex items-center justify-center transition shadow"
-                      title="Rolar Dano / Ataque"
-                    >
-                      🎲
-                    </button>
-                  </td>
+			setPlayerEquipments((equipments) => {
+				const newEquipments = [...equipments];
+				newEquipments.splice(index, 1);
+				return newEquipments;
+			});
+		};
 
-                  <td className="py-3 px-2">
-                    <input
-                      type="number"
-                      min={0}
-                      defaultValue={item.currentAmmo ?? 0}
-                      onBlur={(e) =>
-                        handleAmmoChange(item.id, parseInt(e.target.value) || 0)
-                      }
-                      className="w-16 bg-black/60 border border-purple-700 rounded text-center text-white py-1 text-xs focus:outline-none focus:border-purple-400"
-                    />
-                  </td>
+		socket_equipmentChange.current = (eq) => {
+			const availableIndex = availableEquipments.findIndex((_eq) => _eq.id === eq.id);
+			const playerIndex = playerEquipments.findIndex((_eq) => _eq.Equipment.id === eq.id);
 
-                  <td className="py-3 px-2 text-gray-300">
-                    {item.ammo ?? '-'}
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={8} className="py-8 text-center text-gray-400 italic">
-                  Nenhum equipamento ou arma cadastrada no momento.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+			if (eq.visible) {
+				if (availableIndex === -1 && playerIndex === -1)
+					return setAvailableEquipments((equipments) => [...equipments, eq]);
+			} else if (availableIndex > -1) {
+				return setAvailableEquipments((equipments) => {
+					const newEquipments = [...equipments];
+					newEquipments.splice(availableIndex, 1);
+					return newEquipments;
+				});
+			}
 
-      {isModalOpen && (
-        <EquipmentEditorModal
-          isOpen={isModalOpen}
-          onClose={() => {
-            setIsModalOpen(false);
-            setSelectedEquipment(null);
-          }}
-          playerId={playerId}
-          equipment={selectedEquipment}
-          onSuccess={() => {
-            setIsModalOpen(false);
-            setSelectedEquipment(null);
-            if (onUpdate) onUpdate();
-          }}
-        />
-      )}
+			if (availableIndex > -1) {
+				setAvailableEquipments((equipments) => {
+					const newEquipments = [...equipments];
+					newEquipments[availableIndex] = {
+						id: eq.id,
+						name: eq.name,
+					};
+					return newEquipments;
+				});
+				return;
+			}
 
-      {diceModalData.isOpen && (
-        <DiceRollModal
-          isOpen={diceModalData.isOpen}
-          onClose={() =>
-            setDiceModalData({ isOpen: false, title: '', formula: '' })
-          }
-          title={diceModalData.title}
-          formula={diceModalData.formula}
-        />
-      )}
-    </div>
-  );
+			if (playerIndex === -1) return;
+
+			setPlayerEquipments((equipments) => {
+				const newEquipments = [...equipments];
+				newEquipments[playerIndex].Equipment = eq;
+				return newEquipments;
+			});
+		};
+
+		socket_requestReceived.current = (
+			type,
+			tradeId,
+			receiverObjectId,
+			senderName,
+			equipmentName
+		) => {
+			if (type !== 'equipment') return;
+
+			currentTradeId.current = tradeId;
+
+			const equip = playerEquipments.find((eq) => eq.Equipment.id === receiverObjectId);
+
+			const accept = confirm(
+				`${senderName} te ofereceu ${equipmentName}${
+					receiverObjectId ? ` em troca de ${equip?.Equipment.name}.` : '.'
+				}` + ' Você deseja aceitar essa proposta?'
+			);
+
+			api
+				.post('/sheet/player/trade/equipment', {
+					tradeId,
+					accept,
+				})
+				.then((res) => {
+					if (!accept) return;
+
+					const newEquip: PlayerEquipment & { Equipment: Equipment } = res.data.equipment;
+
+					if (receiverObjectId) {
+						const index = playerEquipments.findIndex(
+							(eq) => eq.Equipment.id === receiverObjectId
+						);
+						if (index === -1) return;
+						const oldEq = playerEquipments[index];
+
+						availableEquipments.push(oldEq.Equipment);
+						playerEquipments[index] = newEquip;
+					} else {
+						playerEquipments.push(newEquip);
+					}
+					availableEquipments.splice(
+						availableEquipments.findIndex((e) => e.id === newEquip.Equipment.id),
+						1
+					);
+
+					setPlayerEquipments([...playerEquipments]);
+					setAvailableEquipments([...availableEquipments]);
+				})
+				.catch(logError)
+				.finally(() => (currentTradeId.current = null));
+		};
+
+		socket_responseReceived.current = (accept, tradeRes) => {
+			if (!currentTradeId.current) return;
+
+			currentTradeId.current = null;
+			if (tradeTimeout.current) {
+				clearTimeout(tradeTimeout.current);
+				tradeTimeout.current = null;
+			}
+
+			if (accept) {
+				const index = playerEquipments.findIndex(
+					(e) => e.Equipment.id === trade.offer.id
+				);
+				if (index === -1) return;
+
+				if (tradeRes) {
+					if (tradeRes.type !== 'equipment')
+						return logError(new Error('Expected Equipment'));
+					const oldEq = playerEquipments[index];
+
+					availableEquipments.push(oldEq.Equipment);
+					availableEquipments.splice(
+						availableEquipments.findIndex((e) => e.id === tradeRes.obj.Equipment.id),
+						1
+					);
+					setAvailableEquipments([...availableEquipments]);
+
+					playerEquipments[index] = tradeRes.obj;
+				} else {
+					const eq = playerEquipments.splice(index, 1)[0];
+					setAvailableEquipments((e) =>[...e, eq.Equipment]);
+				}
+
+				setPlayerEquipments([...playerEquipments]);
+			} else {
+				alert('O jogador rejeitou sua proposta.');
+			}
+			setLoading(false);
+			setTrade(tradeInitialValue);
+		};
+	});
+
+  useEffect(() => {
+    const unsubs: (() => void)[] = [];
+    unsubs.push(on('equipmentAdd', (payload) => socket_equipmentAdd.current(payload.id, payload.name)));
+    unsubs.push(on('equipmentRemove', (payload) => socket_equipmentRemove.current(payload.id)));
+    unsubs.push(on('equipmentChange', (payload) => socket_equipmentChange.current(payload.equipment)));
+    unsubs.push(on('playerTradeRequest', (payload) =>
+      socket_requestReceived.current(
+        payload.type,
+        payload.tradeId,
+        payload.receiverObjectId,
+        payload.senderName,
+        payload.senderObjectName
+      )
+    ));
+    unsubs.push(on('playerTradeResponse', (payload) =>
+      socket_responseReceived.current(payload.accept, payload.object)
+    ));
+    return () => { unsubs.forEach(u => u()); };
+  }, [on]);
+
+	// Lógica de Criar Equipamento
+	function onEquipCreateSubmit(equip: Equipment) {
+		setLoading(true);
+		api
+			.put('/sheet/equipment', equip)
+			.then((res) => {
+				return api.put('/sheet/player/equipment', { id: res.data.id, npcId: props.npcId });
+			})
+			.then((res) => {
+				const newEquip = res.data.equipment;
+				setPlayerEquipments([...playerEquipments, newEquip]);
+				setEquipEditorModalShow(false);
+			})
+			.catch(logError)
+			.finally(() => setLoading(false));
+	}
+
+	// Lógica de Editar Equipamento (Duplo clique)
+	function onEquipEditSubmit(equip: Equipment) {
+		setLoading(true);
+		api
+			.post('/sheet/equipment', equip)
+			.catch(logError)
+			.finally(() => {
+				setLoading(false);
+				setEquipEditorModalShow(false);
+			});
+	}
+
+	function onAddEquipment(id: number) {
+		setLoading(true);
+		api
+			.put('/sheet/player/equipment', { id, npcId: props.npcId })
+			.then((res) => {
+				const equipment = res.data.equipment;
+				setPlayerEquipments([...playerEquipments, equipment]);
+
+				const newEquipments = [...availableEquipments];
+				newEquipments.splice(
+					newEquipments.findIndex((eq) => eq.id === id),
+					1
+				);
+				setAvailableEquipments(newEquipments);
+			})
+			.catch(logError)
+			.finally(() => {
+				setAddEquipmentShow(false);
+				setLoading(false);
+			});
+	}
+
+	function onDeleteEquipment(id: number) {
+		const newPlayerEquipments =[...playerEquipments];
+		const index = newPlayerEquipments.findIndex((eq) => eq.Equipment.id === id);
+
+		if (index === -1) return;
+
+		newPlayerEquipments.splice(index, 1);
+		setPlayerEquipments(newPlayerEquipments);
+
+		const modalEquipment = { id, name: playerEquipments[index].Equipment.name };
+		setAvailableEquipments([...availableEquipments, modalEquipment]);
+	}
+
+	function onTradeShow(id: number, donation: boolean) {
+		if (currentTradeId.current) {
+			return alert(
+				'Você ainda está em uma troca. ' +
+					'Por favor, espere esta troca concluir antes de começar uma nova.'
+			);
+		}
+
+		const equipment = playerEquipments.find((eq) => eq.Equipment.id === id);
+		if (!equipment) return;
+
+		return setTrade({
+			type: 'equipment',
+			show: true,
+			offer: equipment.Equipment,
+			donation,
+		});
+	}
+
+	function onTradeSubmit(playerId: number, tradeId?: number) {
+		setLoading(true);
+		api
+			.put('/sheet/player/trade/equipment', {
+				offerId: trade.offer.id,
+				playerId,
+				tradeId,
+			})
+			.then((res) => {
+				currentTradeId.current = res.data.id;
+				tradeTimeout.current = setTimeout(() => {
+					onTradeHide();
+					alert(`A troca excedeu o tempo limite (${tradeTimeLimit}ms) e foi cancelada.`);
+				}, tradeTimeLimit);
+			})
+			.catch((err) => {
+				logError(err);
+				setLoading(false);
+				setTrade(tradeInitialValue);
+			});
+	}
+
+	function onTradeHide() {
+		if (currentTradeId.current) {
+			api
+				.delete('/sheet/player/trade/equipment', {
+					data: {
+						tradeId: currentTradeId.current,
+					},
+				})
+				.catch(logError)
+				.finally(() => (currentTradeId.current = null));
+		}
+
+		setTrade(tradeInitialValue);
+		setLoading(false);
+
+		if (tradeTimeout.current) {
+			clearTimeout(tradeTimeout.current);
+			tradeTimeout.current = null;
+		}
+	}
+
+	const equipments = useMemo(
+		() => playerEquipments.sort((a, b) => a.Equipment.id - b.Equipment.id),
+		[playerEquipments]
+	);
+
+	return (
+		<>
+			<DataContainer
+				outline
+				title={props.title}
+				addButton={{ onAdd: () => setAddEquipmentShow(true), disabled: loading }}>
+				
+				<Row className='mb-3 justify-content-center'>
+					<Col xs='auto'>
+						<Button 
+							size='sm' 
+							variant='secondary' 
+							style={{ backgroundColor: '#6f42c1', borderColor: '#6f42c1' }}
+							onClick={() => {
+								setEquipEditorData(undefined);
+								setEquipEditorOperation('create');
+								setEquipEditorModalShow(true);
+							}}
+						>
+							+ Criar Equipamento Customizado
+						</Button>
+					</Col>
+				</Row>
+
+				<Row className='text-center'>
+					<Col>
+						<Table responsive className='align-middle'>
+							<thead>
+								<tr>
+									<th></th>
+									{props.partners && props.partners.length > 0 && (
+										<>
+											<th></th>
+											<th></th>
+										</>
+									)}
+									<th>Nome</th>
+									<th>Tipo</th>
+									<th>Dano</th>
+									<th></th>
+									<th>Alcance</th>
+									<th>Ataques</th>
+									<th>Mun. Atual</th>
+									<th>Mun. Máxima</th>
+								</tr>
+							</thead>
+							<tbody>
+								{equipments.map((eq) => (
+									<PlayerEquipmentField
+										key={eq.Equipment.id}
+										equipment={eq.Equipment}
+										currentAmmo={eq.currentAmmo}
+										onDelete={() => onDeleteEquipment(eq.Equipment.id)}
+										onTrade={(donation) => onTradeShow(eq.Equipment.id, donation)}
+										showDiceRollResult={onDiceRoll}
+										disableTrades={props.partners?.length === 0}
+										npcId={props.npcId}
+										onEditBase={() => {
+											setEquipEditorData(eq.Equipment);
+											setEquipEditorOperation('edit');
+											setEquipEditorModalShow(true);
+										}}
+									/>
+								))}
+							</tbody>
+						</Table>
+					</Col>
+				</Row>
+			</DataContainer>
+			<AddDataModal
+				title={`Adicionar em ${props.title}`}
+				show={addEquipmentShow}
+				onHide={() => setAddEquipmentShow(false)}
+				data={availableEquipments}
+				onAddData={onAddEquipment}
+				disabled={loading}
+			/>
+			<EquipmentEditorModal
+				show={equipEditorModalShow}
+				onHide={() => setEquipEditorModalShow(false)}
+				data={equipEditorData as Equipment}
+				operation={equipEditorOperation}
+				onSubmit={(equip) => {
+					if (equipEditorOperation === 'create') onEquipCreateSubmit(equip);
+					else onEquipEditSubmit(equip);
+				}}
+				disabled={loading}
+			/>
+			{props.partners && props.partners.length > 0 && (
+				<PlayerTradeModal
+					{...trade}
+					partners={props.partners}
+					onHide={onTradeHide}
+					onSubmit={onTradeSubmit}
+					disabled={loading}
+				/>
+			)}
+			<DiceRollModal {...diceRollResultModalProps} />
+		</>
+	);
+}
+
+type PlayerEquipmentFieldProps = {
+	currentAmmo: number;
+	equipment: {
+		id: number;
+		ammo: number | null;
+		attacks: string;
+		damage: string;
+		name: string;
+		range: string;
+		type: string;
+	};
+	disableTrades?: boolean;
+	onDelete: () => void;
+	onTrade: (donation: boolean) => void;
+	showDiceRollResult: DiceRollEvent;
+	onEditBase: () => void;
+	npcId?: number;
+};
+
+function PlayerEquipmentField(props: PlayerEquipmentFieldProps) {
+	const [currentAmmo, setCurrentAmmo, isClean] = useExtendedState(props.currentAmmo);
+	const [loading, setLoading] = useState(false);
+
+	const logError = useContext(ErrorLogger);
+	const equipmentID = props.equipment.id;
+
+	function onAmmoChange(ev: FormEvent<HTMLInputElement>) {
+		const aux = ev.currentTarget.value;
+		let newAmmo = parseInt(aux);
+
+		if (aux.length === 0) newAmmo = 0;
+		else if (isNaN(newAmmo)) return;
+
+		setCurrentAmmo(newAmmo);
+	}
+
+	function onAmmoBlur() {
+		if (isClean()) return;
+		let newAmmo = currentAmmo;
+
+		if (props.equipment.ammo && currentAmmo > props.equipment.ammo)
+			newAmmo = props.equipment.ammo;
+
+		setCurrentAmmo(newAmmo);
+		api
+			.post('/sheet/player/equipment', {
+				id: equipmentID,
+				currentAmmo: newAmmo,
+				npcId: props.npcId,
+			})
+			.catch(logError);
+	}
+
+	function diceRoll() {
+		if (props.equipment.ammo && currentAmmo === 0)
+			return alert('Você não tem munição suficiente.');
+		const aux = resolveDices(props.equipment.damage);
+		if (!aux) return;
+		props.showDiceRollResult({ dices: aux });
+		const ammo = currentAmmo - 1;
+		setCurrentAmmo(ammo);
+		api
+			.post('/sheet/player/equipment', {
+				id: equipmentID,
+				currentAmmo: ammo,
+				npcId: props.npcId,
+			})
+			.catch((err) => {
+				logError(err);
+				setCurrentAmmo(currentAmmo);
+			});
+	}
+
+	function deleteEquipment() {
+		if (!confirm('Você realmente deseja excluir esse equipamento?')) return;
+		setLoading(true);
+		api
+			.delete('/sheet/player/equipment', {
+				data: { id: equipmentID, npcId: props.npcId },
+			})
+			.then(props.onDelete)
+			.catch((err) => {
+				logError(err);
+				setLoading(false);
+			});
+	}
+
+	return (
+		<tr>
+			<td>
+				<Button
+					aria-label='Apagar'
+					onClick={deleteEquipment}
+					size='sm'
+					variant='secondary'
+					disabled={loading}>
+					{loading ? <CustomSpinner /> : <BsTrash color='white' size='1.5rem' />}
+				</Button>
+			</td>
+			{!props.disableTrades && (
+				<>
+					<td>
+						<Button
+							aria-label='Oferecer'
+							onClick={() => props.onTrade(true)}
+							size='sm'
+							variant='secondary'
+							disabled={loading}>
+							{loading ? (
+								<CustomSpinner />
+							) : (
+								<FaHandHolding color='white' size='1.5rem' />
+							)}
+						</Button>
+					</td>
+					<td>
+						<Button
+							aria-label='Trocar'
+							onClick={() => props.onTrade(false)}
+							size='sm'
+							variant='secondary'
+							disabled={loading}>
+							{loading ? (
+								<CustomSpinner />
+							) : (
+								<FaHandsHelping color='white' size='1.5rem' />
+							)}
+						</Button>
+					</td>
+				</>
+			)}
+			<td
+				onDoubleClick={props.onEditBase}
+				title="Dê um duplo clique para editar este equipamento."
+				style={{ 
+					cursor: 'pointer', 
+					color: '#b175ff', 
+					textDecoration: 'underline',
+					fontWeight: 'bold'
+				}}
+			>
+				{props.equipment.name}
+			</td>
+			<td>{props.equipment.type}</td>
+			<td>{props.equipment.damage}</td>
+			<td>
+				{props.equipment.damage !== '-' && (
+					<Image
+						alt='Dado'
+						src='/dice20.png'
+						className='clickable'
+						onClick={diceRoll}
+						style={{ maxHeight: '2rem' }}
+					/>
+				)}
+			</td>
+			<td>{props.equipment.range}</td>
+			<td>{props.equipment.attacks}</td>
+			<td>
+				{props.equipment.ammo ? (
+					<BottomTextInput
+						disabled={loading}
+						className='text-center'
+						value={currentAmmo}
+						onChange={onAmmoChange}
+						onBlur={onAmmoBlur}
+						style={{ maxWidth: '3rem' }}
+					/>
+				) : (
+					'-'
+				)}
+			</td>
+			<td>{props.equipment.ammo || '-'}</td>
+		</tr>
+	);
 }

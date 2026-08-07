@@ -28,17 +28,10 @@ type SortableContainerProps = {
 
 const style = { maxWidth: '4rem' };
 
-function handleHighlight(playerId: number | null, color?: string) {
-  api.post('/portrait/portraitHighlight', {
+function handleHighlight(playerId: number | null) {
+  api.post('/portrait/highlight', {
     playerId,
-    color: color || '#ddaf0f',
-  }).catch(() => {
-    // Tenta a rota em api/portrait/highlight caso a anterior falhe
-    api.post('/portrait/highlight', {
-      playerId,
-      color: color || '#ddaf0f',
-    }).catch((err) => console.error(err));
-  });
+  }).catch((err) => console.error(err));
 }
 
 const SortableList = SortableContainer((props: SortableContainerProps) => {

@@ -18,23 +18,15 @@ export default function PortraitDiceContainer(props: {
   debug?: boolean;
   layout?: LayoutData | null;
 }) {
-  const diceQueue = useRef<DiceResponse[]>([]);
-  const diceData = useRef<DiceResponse>();
+  const diceQueue = useRef<any[]>([]);
+  const isAnimating = useRef(false);
 
-  const showDiceRef = useRef(props.showDice);
   const { on } = useRealtime();
 
-  // Sincroniza o ref sempre que a prop showDice muda no componente pai
-  useEffect(() => {
-    showDiceRef.current = props.showDice;
-  }, [props.showDice]);
-
-  const [diceResult, setDiceResult] = useState<number | null>(null);
+  const [diceResult, setDiceResult] = useState<number | string | null>(null);
   const diceResultRef = useRef<HTMLDivElement>(null);
-  const lastDiceResult = useRef(0);
   const [diceDescription, setDiceDescription] = useState<string | null>(null);
   const diceDescriptionRef = useRef<HTMLDivElement>(null);
-  const lastDiceDescription = useRef('');
 
   const diceVideo = useRef<HTMLVideoElement>(null);
 
@@ -53,54 +45,46 @@ export default function PortraitDiceContainer(props: {
       diceDescriptionRef.current.style.textShadow = style.textShadow;
     }
 
-    function showDiceRoll() {
+    async function triggerRollAnimation(rollValue: number | string, description?: string) {
+      isAnimating.current = true;
+
+      // 1. Mostra o container e dispara o vídeo do zero
+      props.onShowDice();
       if (diceVideo.current) {
-        props.onShowDice();
         diceVideo.current.currentTime = 0;
         diceVideo.current.play().catch(() => {});
       }
-    }
 
-    async function onDiceResult(result: DiceResponse) {
-      if (diceData.current) {
-        diceQueue.current.push(result);
-        return;
-      }
+      // 2. Define o resultado imediatamente para aparecer junto com a animação
+      setDiceResult(rollValue);
+      setDiceDescription(description || null);
 
-      diceData.current = result;
-      showDiceRoll();
+      // 3. Mantém visível por 2 segundos
+      await sleep(2000);
 
-      lastDiceResult.current = result.roll;
-      setDiceResult(result.roll);
-
-      if (result.resultType) {
-        lastDiceDescription.current = result.resultType.description;
-        await sleep(750);
-        setDiceDescription(result.resultType.description);
-      } else {
-        setDiceDescription(null);
-      }
-
-      await sleep(1500);
-
+      // 4. Esconde o resultado e o container
       setDiceResult(null);
       setDiceDescription(null);
-
-      await sleep(250);
       props.onHideDice();
-      await sleep(600);
 
-      diceData.current = undefined;
+      await sleep(300);
 
+      // 5. Processa o próximo da fila se houver
       const next = diceQueue.current.shift();
       if (next) {
-        onDiceResult(next);
+        triggerRollAnimation(next.roll, next.description);
+      } else {
+        isAnimating.current = false;
       }
     }
 
     const unsub1 = on('diceRoll', (payload) => {
       if (payload.playerId !== props.playerId) return;
-      showDiceRoll();
+      props.onShowDice();
+      if (diceVideo.current) {
+        diceVideo.current.currentTime = 0;
+        diceVideo.current.play().catch(() => {});
+      }
     });
 
     const unsub2 = on('diceResult', (payload) => {
@@ -109,20 +93,25 @@ export default function PortraitDiceContainer(props: {
 
       if (!results || results.length === 0) return;
 
+      let rollVal: number | string = '';
+      let desc: string | undefined = undefined;
+
       if (results.length === 1) {
-        return onDiceResult(results[0]);
+        rollVal = results[0].roll;
+        desc = results[0].resultType?.description;
+      } else if (Array.isArray(dices)) {
+        rollVal = results.reduce((prev, cur) => prev + cur.roll, 0);
+      } else {
+        rollVal = results.map((d) => d.roll).join(' | ');
+        desc = results.map((d) => d.resultType?.description).filter(Boolean).join(' - ');
       }
 
-      if (Array.isArray(dices)) {
-        onDiceResult({
-          roll: results.reduce((prev, cur) => prev + cur.roll, 0),
-        });
-      } else {
-        const first = results.shift();
-        if (!first) return;
-        diceQueue.current.push(...results);
-        onDiceResult(first);
+      if (isAnimating.current) {
+        diceQueue.current.push({ roll: rollVal, description: desc });
+        return;
       }
+
+      triggerRollAnimation(rollVal, desc);
     });
 
     return () => { 
@@ -157,10 +146,10 @@ export default function PortraitDiceContainer(props: {
         {(isDebugMode || diceResult !== null || diceDescription !== null) && (
           <div className={styles.diceTextGroup}>
             <div className={styles.result} ref={diceResultRef}>
-              {isDebugMode ? '42' : (diceResult || lastDiceResult.current || '')}
+              {isDebugMode ? '42' : (diceResult ?? '')}
             </div>
             <div className={styles.description} ref={diceDescriptionRef}>
-              {isDebugMode ? 'Crítico' : (diceDescription || lastDiceDescription.current || '')}
+              {isDebugMode ? 'Crítico' : (diceDescription ?? '')}
             </div>
           </div>
         )}

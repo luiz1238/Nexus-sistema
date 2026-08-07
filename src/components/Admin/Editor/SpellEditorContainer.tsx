@@ -30,8 +30,7 @@ export default function SpellEditorContainer(props: SpellEditorContainerProps) {
       !sp.damage ||
       !sp.duration ||
       !sp.range ||
-      !sp.target ||
-      !sp.type
+      !sp.target
     )
       return alert(
         'Nenhum campo pode ser vazio. Para definir um campo vazio, utilize "-"'
@@ -39,24 +38,26 @@ export default function SpellEditorContainer(props: SpellEditorContainerProps) {
 
     setLoading(true);
 
+    const dataToSend = { ...sp, type: sp.type || '-' };
+
     const config: AxiosRequestConfig =
       spellModal.operation === 'create'
         ? {
             method: 'PUT',
-            data: { ...sp, id: undefined },
+            data: { ...dataToSend, id: undefined },
           }
         : {
             method: 'POST',
-            data: sp,
+            data: dataToSend,
           };
 
     api('/sheet/spell', config)
       .then((res) => {
         if (spellModal.operation === 'create') {
-          setSpell([...spell, { ...sp, id: res.data.id }]);
+          setSpell([...spell, { ...dataToSend, id: res.data.id }]);
           return;
         }
-        spell[spell.findIndex((_sp) => _sp.id === sp.id)] = sp;
+        spell[spell.findIndex((_sp) => _sp.id === sp.id)] = dataToSend;
         setSpell([...spell]);
       })
       .catch(logError)

@@ -21,7 +21,6 @@ export default function EquipmentEditorModal({
   const [range, setRange] = useState('');
   const [attacks, setAttacks] = useState('');
   const [ammo, setAmmo] = useState('');
-  const [defeito, setDefeito] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -37,7 +36,6 @@ export default function EquipmentEditorModal({
           ? String(equipment.ammo)
           : ''
       );
-      setDefeito(equipment.defeito || '');
     } else {
       setName('');
       setType('');
@@ -45,7 +43,6 @@ export default function EquipmentEditorModal({
       setRange('');
       setAttacks('');
       setAmmo('');
-      setDefeito('');
     }
     setError('');
   }, [equipment, isOpen]);
@@ -64,7 +61,6 @@ export default function EquipmentEditorModal({
       range,
       attacks,
       ammo: ammo && ammo.trim() !== '' ? parseInt(ammo, 10) : null,
-      defeito,
     };
 
     try {
@@ -187,18 +183,6 @@ export default function EquipmentEditorModal({
                 className="w-full rounded border border-purple-700 bg-black/60 p-2 text-white focus:border-purple-400 focus:outline-none"
               />
             </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold uppercase text-purple-300 mb-1">
-              Defeito
-            </label>
-            <input
-              type="text"
-              value={defeito}
-              onChange={(e) => setDefeito(e.target.value)}
-              className="w-full rounded border border-purple-700 bg-black/60 p-2 text-white focus:border-purple-400 focus:outline-none"
-            />
           </div>
 
           <div className="mt-6 flex justify-end gap-3 pt-2">

@@ -38,8 +38,13 @@ export default function PortraitAvatar(props: {
   const [showAvatar, setShowAvatar] = useState(false);
   const [attributeStatus, setAttributeStatus] = useState(props.attributeStatus);
   const previousStatusID = useRef(Number.MAX_SAFE_INTEGER);
+
+  // Estado da cor do brilho (destaque no combate)
+  const [highlightColor, setHighlightColor] = useState<string | null>(null);
+
   const { on } = useRealtime();
 
+  // Carrega o avatar inicial
   useEffect(() => {
     const id = attributeStatus.find((stat) => stat.value)?.attribute_status_id || 0;
     previousStatusID.current = id;
@@ -56,8 +61,10 @@ export default function PortraitAvatar(props: {
       });
   }, []);
 
+  // Escuta alteração de status do personagem e escuta o evento de brilho (highlight)
   useEffect(() => {
-    const unsub = on('playerAttributeStatusChange', (payload) => {
+    // 1. Escuta troca de status (ex: ferido, sangrando, etc)
+    const unsubStatus = on('playerAttributeStatusChange', (payload) => {
       if (payload.playerId !== props.playerId) return;
       const newStatus = [...attributeStatus];
 
@@ -88,7 +95,20 @@ export default function PortraitAvatar(props: {
           });
       }
     });
-    return () => { unsub?.(); };
+
+    // 2. Escuta destaque/brilho disparado pelo painel de combate do Mestre
+    const unsubHighlight = on('portraitHighlight', (payload) => {
+      if (payload.playerId === props.playerId) {
+        setHighlightColor(payload.color || '#ddaf0f');
+      } else {
+        setHighlightColor(null);
+      }
+    });
+
+    return () => {
+      unsubStatus?.();
+      unsubHighlight?.();
+    };
   }, [on, attributeStatus, props.playerId]);
 
   return (
@@ -103,10 +123,21 @@ export default function PortraitAvatar(props: {
       playerId={props.playerId}
     >
       <Fade in={showAvatar || !!props.debug}>
-        <div style={{ width: '100%', height: '100%', background: props.debug ? 'rgba(80,40,120,0.2)' : 'transparent' }}>
+        <div
+          style={{
+            width: '100%',
+            height: '100%',
+            background: props.debug ? 'rgba(80,40,120,0.2)' : 'transparent',
+            // Aplica a aura brilhante Neon se highlightColor estiver definido
+            filter: highlightColor
+              ? `drop-shadow(0 0 15px ${highlightColor}) drop-shadow(0 0 30px ${highlightColor})`
+              : 'none',
+            transition: 'filter 0.4s ease-in-out',
+          }}
+        >
           <Image
             src={src}
-            alt='Avatar'
+            alt="Avatar"
             onError={() => setSrc('/avatar404.png')}
             onLoad={() => setShowAvatar(true)}
             className={styles.avatar}
@@ -116,43 +147,3 @@ export default function PortraitAvatar(props: {
     </PortraitDraggableResizable>
   );
 }
-// src/components/Portrait/PortraitAvatarContainer.tsx
-import { useEffect, useState } from 'react';
-import useRealtime from '../../hooks/useRealtime';
-
-// Dentro do seu componente PortraitAvatarContainer:
-export default function PortraitAvatarContainer(props: PortraitAvatarContainerProps) {
-  const [highlightColor, setHighlightColor] = useState<string | null>(null);
-  const { on } = useRealtime();
-
-  useEffect(() => {
-    // Escuta quando o mestre clica no nome no combate
-    const unsub = on('portraitHighlight', (payload) => {
-      if (payload.playerId !== props.playerId) return;
-
-      setHighlightColor(payload.color || '#ddaf0f');
-
-      // O brilho permanece por 2.5 segundos e depois apaga suavemente
-      setTimeout(() => {
-        setHighlightColor(null);
-      }, 2500);
-    });
-
-    return () => { unsub?.(); };
-  }, [on, props.playerId]);
-
-  return (
-    <div
-      style={{
-        // Aplica um filtro de brilho neon suave com a cor da ficha quando ativado
-        filter: highlightColor
-          ? `drop-shadow(0 0 15px ${highlightColor}) drop-shadow(0 0 30px ${highlightColor})`
-          : 'none',
-        transition: 'filter 0.4s ease-in-out',
-      }}
-    >
-      {/* Imagem do Avatar / Elementos do Portrait */}
-    </div>
-  );
-}
-

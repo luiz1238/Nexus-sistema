@@ -214,20 +214,16 @@ model PlayerSkill {
 }
 
 model Equipment {
-  id      Int     @id @default(autoincrement())
-  name    String
-  type    String
-  damage  String
-  range   String
-  attacks String
-  ammo    Int     @default(0)
-  slots   Int     @default(0)
-  visible Boolean @default(true)
-  defeito String  @default("")
-
-  // Relações com os jogadores e NPCs (mantenha as linhas de relação que já existirem no seu ficheiro)
+  id              Int               @id @default(autoincrement())
+  name            String
+  type            String
+  damage          String
+  range           String
+  attacks         String
+  ammo            Int?
+  visible         Boolean
+  defeito         String            @default("")
   PlayerEquipment PlayerEquipment[]
-  NPCEquipment    NPCEquipment[]
 }
 
 model PlayerItem {

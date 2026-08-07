@@ -49,3 +49,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 }
 
 export default sessionAPI(handler);
+
+// Aumenta o limite de tamanho do corpo da requisição para permitir salvar todos os avatares/estados (Base64)
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '10mb',
+    },
+  },
+};

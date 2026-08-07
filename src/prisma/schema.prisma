@@ -107,7 +107,6 @@ model Equipment {
   attacks         String
   ammo            Int?
   visible         Boolean
-  defeito         String            @default("")
   PlayerEquipment PlayerEquipment[]
 }
 

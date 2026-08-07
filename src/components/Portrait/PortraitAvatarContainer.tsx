@@ -96,7 +96,11 @@ export default function PortraitAvatar(props: {
     // Escuta o comando do Mestre para destacar o personagem
     const unsubHighlight = on('portraitHighlight', (payload) => {
       if (payload.playerId === props.playerId) {
-        setHighlightColor(payload.color || '#ddaf0f');
+        let color = payload.color || '#ddaf0f';
+        if (!color.startsWith('#')) {
+          color = `#${color}`;
+        }
+        setHighlightColor(color);
       } else {
         setHighlightColor(null);
       }
@@ -128,9 +132,9 @@ export default function PortraitAvatar(props: {
             onLoad={() => setShowAvatar(true)}
             className={styles.avatar}
             style={{
-              // Aplica o brilho diretamente na silhueta da foto do personagem
+              // Aplica o brilho contornando a foto do personagem na cor única da sua ficha
               filter: highlightColor
-                ? `drop-shadow(0 0 20px ${highlightColor}) drop-shadow(0 0 45px ${highlightColor})`
+                ? `drop-shadow(0 0 15px ${highlightColor}) drop-shadow(0 0 35px ${highlightColor})`
                 : undefined,
               transition: 'filter 0.4s ease-in-out',
             }}

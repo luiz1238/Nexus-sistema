@@ -7,7 +7,6 @@ import Image from 'react-bootstrap/Image';
 import { ErrorLogger } from '../../contexts';
 import useRealtime from '../../hooks/useRealtime';
 import api from '../../utils/api';
-import BottomTextInput from '../BottomTextInput';
 import CustomSpinner from '../CustomSpinner';
 import DataContainer from '../DataContainer';
 import AddDataModal from '../Modals/AddDataModal';
@@ -18,7 +17,7 @@ import useDiceRoll from '../../hooks/useDiceRoll';
 import EquipmentEditorModal, { EquipmentWithDefect } from '../Modals/EquipmentEditorModal';
 
 type PlayerEquipmentContainerProps = {
-  title: string;
+  title?: string;
   playerEquipments: EquipmentWithDefect[];
   availableEquipments: EquipmentWithDefect[];
   npcId?: number;
@@ -124,11 +123,14 @@ export default function PlayerEquipmentContainer(props: PlayerEquipmentContainer
     setLoading(true);
     api
       .post('/sheet/equipment', equipment)
-      .catch(logError)
-      .finally(() => {
-        setLoading(false);
+      .then(() => {
+        setPlayerEquipments((prev) =>
+          prev.map((eq) => (eq.id === equipment.id ? equipment : eq))
+        );
         setEquipmentEditorModalShow(false);
-      });
+      })
+      .catch(logError)
+      .finally(() => setLoading(false));
   }
 
   function onAddEquipment(id: number) {
@@ -156,19 +158,17 @@ export default function PlayerEquipmentContainer(props: PlayerEquipmentContainer
   function onDeleteEquipment(id: number) {
     const newPlayerEquipments = [...playerEquipments];
     const index = newPlayerEquipments.findIndex((equipment) => equipment.id === id);
-
-    newPlayerEquipments.splice(index, 1);
-    setPlayerEquipments(newPlayerEquipments);
-
-    const modalEquipment = { id, name: playerEquipments[index].name };
-    setAvailableEquipments([...availableEquipments, modalEquipment]);
+    if (index > -1) {
+      newPlayerEquipments.splice(index, 1);
+      setPlayerEquipments(newPlayerEquipments);
+    }
   }
 
   return (
     <>
       <DataContainer
         outline
-        title={props.title}
+        title={props.title || 'Combate'}
         addButton={{ onAdd: () => setAddEquipmentShow(true), disabled: loading }}>
         <Row className='mb-3 justify-content-center'>
           <Col xs='auto'>
@@ -244,7 +244,6 @@ function PlayerEquipmentField({
 }: PlayerEquipmentFieldProps) {
   const logError = useContext(ErrorLogger);
   const [loading, setLoading] = useState(false);
-  const [currentAmmo, setCurrentAmmo] = useState(equipment.ammo);
 
   function deleteEquipment() {
     if (!confirm('Tem certeza que deseja apagar essa arma/equipamento?')) return;
@@ -291,12 +290,12 @@ function PlayerEquipmentField({
             </Col>
           </Row>
           <Row className='mb-2'>
-            <Col>Tipo: {equipment.type}</Col>
+            <Col>Tipo: {equipment.type || '-'}</Col>
           </Row>
           <Row className='mb-2'>
             <Col>
-              <span className='me-1'>Dano: {equipment.damage} </span>
-              {equipment.damage !== '-' && (
+              <span className='me-1'>Dano: {equipment.damage || '-'} </span>
+              {equipment.damage && equipment.damage !== '-' && (
                 <Image
                   alt='Dado'
                   src='/dice20.png'
@@ -308,13 +307,12 @@ function PlayerEquipmentField({
             </Col>
           </Row>
           <Row className='mb-2'>
-            <Col>Alcance: {equipment.range}</Col>
+            <Col>Alcance: {equipment.range || '-'}</Col>
           </Row>
           <Row className='mb-2'>
-            <Col>Ataques: {equipment.attacks}</Col>
+            <Col>Ataques: {equipment.attacks || '-'}</Col>
           </Row>
 
-          {/* EXIBIÇÃO DO DEFEITO */}
           {equipment.defeito && equipment.defeito !== '-' && (
             <Row className='mb-2'>
               <Col style={{ color: '#ff6b6b' }}>Defeito: {equipment.defeito}</Col>
@@ -322,10 +320,10 @@ function PlayerEquipmentField({
           )}
 
           <Row className='mb-2'>
-            <Col>Munição: {currentAmmo}</Col>
+            <Col>Munição: {equipment.ammo ?? 0}</Col>
           </Row>
           <Row className='mb-2'>
-            <Col>Espaços: {equipment.slots}</Col>
+            <Col>Espaços: {equipment.slots ?? 0}</Col>
           </Row>
         </Col>
       </Row>

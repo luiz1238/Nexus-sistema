@@ -1,10 +1,11 @@
 import type { Spell } from '@prisma/client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, ChangeEvent } from 'react';
 import Container from 'react-bootstrap/Container';
 import FormControl from 'react-bootstrap/FormControl';
 import FormGroup from 'react-bootstrap/FormGroup';
 import FormCheck from 'react-bootstrap/FormCheck';
 import FormLabel from 'react-bootstrap/FormLabel';
+import Button from 'react-bootstrap/Button';
 import SheetModal from './SheetModal';
 
 export type RitualData = Spell & {
@@ -40,6 +41,21 @@ export default function SpellEditorModal(props: EditorModalProps<RitualData>) {
   function hide() {
     setSpell(initialState);
     props.onHide();
+  }
+
+  // Função para carregar arquivo de imagem do computador para o Símbolo
+  function onSymbolFileChange(ev: ChangeEvent<HTMLInputElement>) {
+    const file = ev.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      if (result) {
+        setSpell((sp) => ({ ...sp, symbol: result }));
+      }
+    };
+    reader.readAsDataURL(file);
   }
 
   return (
@@ -79,7 +95,7 @@ export default function SpellEditorModal(props: EditorModalProps<RitualData>) {
         </FormGroup>
 
         <FormGroup controlId='createSpellCost' className='mb-3'>
-          <FormLabel>Custo (PE)</FormLabel>
+          <FormLabel>Custo</FormLabel>
           <FormControl
             className='theme-element'
             value={spell.cost}
@@ -87,22 +103,20 @@ export default function SpellEditorModal(props: EditorModalProps<RitualData>) {
           />
         </FormGroup>
 
-        {/* Novo campo: Sanidade */}
         <FormGroup controlId='createSpellSanity' className='mb-3'>
           <FormLabel>Sanidade</FormLabel>
           <FormControl
             className='theme-element'
-            placeholder='Ex: 1d6 Sanidade'
             value={spell.sanity || ''}
             onChange={(ev) => setSpell((sp) => ({ ...sp, sanity: ev.target.value }))}
           />
         </FormGroup>
 
+        {/* CAMPO ELEMENTO DE VOLTA */}
         <FormGroup controlId='createSpellType' className='mb-3'>
-          <FormLabel>Elemento / Tipo</FormLabel>
+          <FormLabel>Elemento</FormLabel>
           <FormControl
             className='theme-element'
-            placeholder='Ex: Morte, Sangue, Conhecimento, Energia'
             value={spell.type}
             onChange={(ev) => setSpell((sp) => ({ ...sp, type: ev.target.value }))}
           />
@@ -126,7 +140,6 @@ export default function SpellEditorModal(props: EditorModalProps<RitualData>) {
           />
         </FormGroup>
 
-        {/* Alterado de Tempo de Conjuração para Conjuração */}
         <FormGroup controlId='createSpellCastingTime' className='mb-3'>
           <FormLabel>Conjuração</FormLabel>
           <FormControl
@@ -154,15 +167,33 @@ export default function SpellEditorModal(props: EditorModalProps<RitualData>) {
           />
         </FormGroup>
 
-        {/* Novo campo: Símbolo (URL da Imagem) */}
+        {/* Upload do Arquivo de Imagem do Símbolo no Computador */}
         <FormGroup controlId='createSpellSymbol' className='mb-3'>
-          <FormLabel>Símbolo (URL da Imagem)</FormLabel>
+          <FormLabel>Símbolo (Enviar Imagem do Computador)</FormLabel>
           <FormControl
+            type='file'
+            accept='image/*'
             className='theme-element'
-            placeholder='https://link-da-imagem.com/simbolo.png'
-            value={spell.symbol || ''}
-            onChange={(ev) => setSpell((sp) => ({ ...sp, symbol: ev.target.value }))}
+            onChange={onSymbolFileChange}
           />
+          {spell.symbol && spell.symbol !== '-' && (
+            <div className='mt-2 text-center'>
+              <img
+                src={spell.symbol}
+                alt='Símbolo selecionado'
+                style={{ maxHeight: '7rem', objectFit: 'contain' }}
+              />
+              <br />
+              <Button
+                size='sm'
+                variant='outline-danger'
+                className='mt-1'
+                onClick={() => setSpell((sp) => ({ ...sp, symbol: '' }))}
+              >
+                Remover Símbolo
+              </Button>
+            </div>
+          )}
         </FormGroup>
 
         <FormCheck

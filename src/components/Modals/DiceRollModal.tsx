@@ -26,7 +26,7 @@ export type DiceRollModalProps = DiceRoll & {
 
 export default function DiceRollModal(props: DiceRollModalProps) {
   const [dices, setDices] = useState(props.dices);
-  const[num, setNum] = useState(1);
+  const [num, setNum] = useState(1);
   const diceRef = useRef<DiceRollResult | null>(null);
 
   useEffect(() => {
@@ -149,25 +149,13 @@ type DisplayDice = {
 };
 
 function DiceRollResultModal(props: DiceRollResultModalProps) {
-  const[diceResults, setDiceResults] = useState<DiceResponse[]>([]);
-  const[descriptionFade, setDescriptionFade] = useState(false);
-
-  const [diceColor, setDiceColor] = useState('#8a2be2');
+  const [diceResults, setDiceResults] = useState<DiceResponse[]>([]);
+  const [descriptionFade, setDescriptionFade] = useState(false);
 
   const logError = useContext(ErrorLogger);
 
   const descriptionDelayTimeout = useRef<NodeJS.Timeout | null>(null);
   const [rollKey, setRollKey] = useState(0);
-
-  useEffect(() => {
-    const savedColor = localStorage.getItem('playerDiceColor');
-    if (savedColor) setDiceColor(savedColor);
-  },[]);
-
-  function handleColorChange(color: string) {
-    setDiceColor(color);
-    localStorage.setItem('playerDiceColor', color);
-  }
 
   const result: DisplayDice | undefined = useMemo(() => {
     if (diceResults.length === 1)
@@ -216,7 +204,7 @@ function DiceRollResultModal(props: DiceRollResultModalProps) {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[diceResults]);
+  }, [diceResults]);
 
   useEffect(() => {
     if (props.dices === null) return;
@@ -287,28 +275,11 @@ function DiceRollResultModal(props: DiceRollResultModalProps) {
       }}
       bodyStyle={{ minHeight: 120, display: 'flex', alignItems: 'center' }}>
 
-      <div style={{ position: 'absolute', top: '15px', right: '50px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <label style={{ fontSize: '0.8rem', color: '#9d8db3' }}>Cor do Dado:</label>
-        <input
-          type="color"
-          value={diceColor}
-          onChange={(e) => handleColorChange(e.target.value)}
-          style={{
-            border: 'none',
-            width: '25px',
-            height: '25px',
-            cursor: 'pointer',
-            backgroundColor: 'transparent',
-            borderRadius: '4px'
-          }}
-        />
-      </div>
-
       <Container fluid className='text-center'>
         {!result && (
           <Row>
             <Col>
-              <Spinner animation='border' style={{ color: diceColor }} />
+              <Spinner animation='border' style={{ color: '#c4a7e7' }} />
             </Col>
           </Row>
         )}
@@ -321,7 +292,7 @@ function DiceRollResultModal(props: DiceRollResultModalProps) {
                   color: 'white',
                   fontWeight: 'bold',
                   fontSize: '4rem',
-                  textShadow: `0 0 10px ${diceColor}, 0 0 20px ${diceColor}`
+                  textShadow: '0 0 10px #8a2be2, 0 0 20px #8a2be2'
                 }}
               >
                 {result.roll}

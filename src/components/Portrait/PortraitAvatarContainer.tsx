@@ -93,7 +93,6 @@ export default function PortraitAvatar(props: {
       }
     });
 
-    // Escuta o comando do Mestre para destacar o personagem
     const unsubHighlight = on('portraitHighlight', (payload) => {
       if (payload.playerId === props.playerId) {
         let color = payload.color || '#ddaf0f';
@@ -132,7 +131,7 @@ export default function PortraitAvatar(props: {
             onLoad={() => setShowAvatar(true)}
             className={styles.avatar}
             style={{
-              // Aplica o brilho contornando a foto do personagem na cor única da sua ficha
+              // Aplica a aura brilhante contornando exatamente a foto do personagem na cor selecionada
               filter: highlightColor
                 ? `drop-shadow(0 0 15px ${highlightColor}) drop-shadow(0 0 35px ${highlightColor})`
                 : undefined,

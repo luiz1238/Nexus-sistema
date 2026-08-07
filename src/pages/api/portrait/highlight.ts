@@ -18,33 +18,39 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { playerId } = req.body;
   let { color } = req.body;
 
-  // Se a cor não foi passada manualmente, busca a cor do atributo principal do personagem no banco
+  // Se a cor não veio na requisição, consulta no banco a cor do atributo principal do personagem
   if (playerId && !color) {
-    const playerAttribute = await prisma.playerAttribute.findFirst({
-      where: {
-        player_id: playerId,
-        Attribute: { portrait: 'PRIMARY' },
-      },
-      select: {
-        Attribute: {
-          select: { color: true },
+    try {
+      const playerAttribute = await prisma.playerAttribute.findFirst({
+        where: {
+          player_id: playerId,
+          Attribute: { portrait: 'PRIMARY' },
         },
-      },
-    });
+        select: {
+          Attribute: {
+            select: { color: true },
+          },
+        },
+      });
 
-    if (playerAttribute?.Attribute?.color) {
-      color = playerAttribute.Attribute.color;
+      if (playerAttribute?.Attribute?.color) {
+        color = playerAttribute.Attribute.color;
+      }
+    } catch (e) {
+      console.error('Erro ao buscar cor do atributo:', e);
     }
   }
 
-  // Garante a presença do símbolo '#' no código hexadecimal
-  if (color && !color.startsWith('#')) {
+  // Garante a presença do símbolo '#'
+  if (color && typeof color === 'string' && !color.startsWith('#')) {
     color = `#${color}`;
   }
 
+  const finalColor = color || '#ddaf0f';
+
   broadcast('portraitHighlight', {
     playerId: playerId ?? null,
-    color: color || '#ddaf0f',
+    color: finalColor,
   });
 
   res.status(200).end();

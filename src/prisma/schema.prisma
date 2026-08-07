@@ -98,7 +98,7 @@ model Skill {
   PlayerSkill       PlayerSkill[]
 }
 
-model Equipment {
+pment {
   id              Int               @id @default(autoincrement())
   name            String
   type            String
@@ -213,12 +213,22 @@ model PlayerSkill {
   @@id([player_id, skill_id])
 }
 
-model PlayerEquipment {
-  Player       Player    @relation(fields: [player_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  player_id    Int
-  Equipment    Equipment @relation(fields: [equipment_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  equipment_id Int
-  currentAmmo  Int
+model Equipment {
+  id      Int     @id @default(autoincrement())
+  name    String
+  type    String
+  damage  String
+  range   String
+  attacks String
+  ammo    Int     @default(0)
+  slots   Int     @default(0)
+  visible Boolean @default(true)
+  defeito String  @default("")
+
+  // Relações com os jogadores e NPCs (mantenha as linhas de relação que já existirem no seu ficheiro)
+  PlayerEquipment PlayerEquipment[]
+  NPCEquipment    NPCEquipment[]
+}
 
   @@id([player_id, equipment_id])
 }

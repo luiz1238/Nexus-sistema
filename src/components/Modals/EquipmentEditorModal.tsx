@@ -119,12 +119,10 @@ export default function EquipmentEditorModal(props: EditorModalProps<EquipmentWi
           />
         </FormGroup>
 
-        {/* NOVO CAMPO: Defeito */}
         <FormGroup controlId='createEquipmentDefeito' className='mb-3'>
           <FormLabel>Defeito</FormLabel>
           <FormControl
             className='theme-element'
-            placeholder='Ex: Emperra com 1, Avaria no gatilho, etc.'
             value={equipment.defeito || ''}
             onChange={(ev) => setEquipment((eq) => ({ ...eq, defeito: ev.target.value }))}
           />

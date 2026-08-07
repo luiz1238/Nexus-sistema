@@ -112,7 +112,7 @@ export default function PlayerEquipmentContainer(props: PlayerEquipmentContainer
       })
       .then((res) => {
         const newEquipment = res.data.equipment as EquipmentWithDefect;
-        setPlayerEquipments([...playerEquipments, { ...newEquipment, defeito: equipment.defeito }]);
+        setPlayerEquipments([...playerEquipments, { ...newEquipment, defeito: equipment.defeito || '' }]);
         setEquipmentEditorModalShow(false);
       })
       .catch(logError)
@@ -143,7 +143,7 @@ export default function PlayerEquipmentContainer(props: PlayerEquipmentContainer
 
         const newEquipments = [...availableEquipments];
         newEquipments.splice(
-          newEquipments.findIndex((equipment) => equipment.id === id),
+          newEquipments.findIndex((eq) => eq.id === id),
           1
         );
         setAvailableEquipments(newEquipments);
@@ -159,8 +159,10 @@ export default function PlayerEquipmentContainer(props: PlayerEquipmentContainer
     const newPlayerEquipments = [...playerEquipments];
     const index = newPlayerEquipments.findIndex((equipment) => equipment.id === id);
     if (index > -1) {
+      const removed = newPlayerEquipments[index];
       newPlayerEquipments.splice(index, 1);
       setPlayerEquipments(newPlayerEquipments);
+      setAvailableEquipments((prev) => [...prev, { id: removed.id, name: removed.name }]);
     }
   }
 
@@ -265,21 +267,21 @@ function PlayerEquipmentField({
   return (
     <Col xs={12} className='mb-3 w-100 text-center'>
       <Row>
-        <Col className='data-container mx-3'>
-          <Row className='mt-2'>
-            <Col
-              className='h2'
-              onDoubleClick={onEditBase}
-              title="Dê um duplo clique para editar este equipamento."
-              style={{ cursor: 'pointer', color: '#ddaf0f', textDecoration: 'underline' }}
-            >
-              {equipment.name}
+        <Col className='data-container mx-3 py-3'>
+          <Row className='mb-2 align-items-center justify-content-center'>
+            <Col xs='auto'>
+              <span
+                className='h2 me-3'
+                onDoubleClick={onEditBase}
+                title="Dê um duplo clique para editar este equipamento"
+                style={{ cursor: 'pointer', color: '#ddaf0f', textDecoration: 'underline' }}
+              >
+                {equipment.name}
+              </span>
               <Button
                 aria-label='Apagar'
-                className='ms-3'
                 variant='secondary'
                 size='sm'
-                style={{ verticalAlign: 'middle', textDecoration: 'none' }}
                 onClick={(e) => {
                   e.stopPropagation();
                   deleteEquipment();
@@ -315,7 +317,9 @@ function PlayerEquipmentField({
 
           {equipment.defeito && equipment.defeito !== '-' && (
             <Row className='mb-2'>
-              <Col style={{ color: '#ff6b6b' }}>Defeito: {equipment.defeito}</Col>
+              <Col style={{ color: '#ff6b6b', fontWeight: 'bold' }}>
+                Defeito: {equipment.defeito}
+              </Col>
             </Row>
           )}
 

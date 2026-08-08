@@ -43,33 +43,36 @@ export default function PortraitDiceContainer(props: {
       diceDescriptionRef.current.style.textShadow = style.textShadow;
     }
 
+    // Força o pré-carregamento do vídeo para o motor do OBS (CEF)
+    if (diceVideo.current) {
+      diceVideo.current.load();
+    }
+
     async function playRoll(rollVal: number | string, desc?: string) {
       isPlayingRef.current = true;
 
-      // 1. Mostra o container no componente pai imediatamente
       props.onShowDice();
 
-      // 2. Reinicia e reproduz o vídeo do zero
       if (diceVideo.current) {
-        diceVideo.current.currentTime = 0;
-        diceVideo.current.play().catch(() => {});
+        try {
+          diceVideo.current.currentTime = 0;
+          await diceVideo.current.play();
+        } catch (e) {
+          // Garante que se o OBS bloquear a promessa inicial, o fluxo continua
+        }
       }
 
-      // 3. Define o resultado IMEDIATAMENTE para aparecer junto com a animação no 1º lançamento
       setDiceResult(rollVal);
       setDiceDescription(desc || null);
 
-      // 4. Mantém visível durante 2.5 segundos
       await sleep(2500);
 
-      // 5. Limpa os estados e oculta
       setDiceResult(null);
       setDiceDescription(null);
       props.onHideDice();
 
       await sleep(300);
 
-      // 6. Processa a fila de rolagens se houver mais alguma
       const next = queueRef.current.shift();
       if (next) {
         playRoll(next.roll, next.description);
@@ -105,12 +108,10 @@ export default function PortraitDiceContainer(props: {
 
     const unsubRoll = on('diceRoll', (payload) => {
       if (payload.playerId !== props.playerId) return;
-      if (!isPlayingRef.current) {
+      if (!isPlayingRef.current && diceVideo.current) {
         props.onShowDice();
-        if (diceVideo.current) {
-          diceVideo.current.currentTime = 0;
-          diceVideo.current.play().catch(() => {});
-        }
+        diceVideo.current.currentTime = 0;
+        diceVideo.current.play().catch(() => {});
       }
     });
 
@@ -137,11 +138,12 @@ export default function PortraitDiceContainer(props: {
       <div className={styles.diceContainerInner}>
         <video
           muted
+          playsInline
           className={`${isDebugMode ? styles.diceDebug : `popout${props.showDice ? ' show' : ''} ${styles.dice}`}`}
           ref={diceVideo}
           preload="auto"
         >
-          <source src='/dice_animation.webm' />
+          <source src='/dice_animation.webm' type="video/webm" />
         </video>
         {(isDebugMode || diceResult !== null || diceDescription !== null) && (
           <div className={styles.diceTextGroup}>

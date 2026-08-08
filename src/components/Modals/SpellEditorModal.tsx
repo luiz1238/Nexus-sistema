@@ -33,10 +33,15 @@ const initialState: RitualData = {
 export default function SpellEditorModal(props: EditorModalProps<RitualData>) {
   const [spell, setSpell] = useState<RitualData>(initialState);
 
+  // Executado sempre que a janela abre ou a operação/item muda
   useEffect(() => {
-    if (!props.data) return;
-    setSpell(props.data);
-  }, [props.data]);
+    if (!props.show) return;
+    if (props.operation === 'edit' && props.data) {
+      setSpell({ ...props.data });
+    } else {
+      setSpell(initialState);
+    }
+  }, [props.show, props.data, props.operation]);
 
   function hide() {
     setSpell(initialState);
@@ -112,7 +117,6 @@ export default function SpellEditorModal(props: EditorModalProps<RitualData>) {
           />
         </FormGroup>
 
-        {/* CAMPO ELEMENTO DE VOLTA */}
         <FormGroup controlId='createSpellType' className='mb-3'>
           <FormLabel>Elemento</FormLabel>
           <FormControl

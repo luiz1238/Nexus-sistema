@@ -28,7 +28,7 @@ export default function PortraitDiceContainer(props: {
   const diceVideo = useRef<HTMLVideoElement>(null);
 
   const queueRef = useRef<{ roll: number | string; description?: string }[]>([]);
-  const isRunningRef = useRef(false);
+  const isPlayingRef = useRef(false);
 
   useEffect(() => {
     if (!props.showDiceRoll) return;
@@ -43,49 +43,40 @@ export default function PortraitDiceContainer(props: {
       diceDescriptionRef.current.style.textShadow = style.textShadow;
     }
 
-    async function runAnimation(rollVal: number | string, desc?: string) {
-      isRunningRef.current = true;
+    async function playRoll(rollVal: number | string, desc?: string) {
+      isPlayingRef.current = true;
 
-      // 1. Mostra o container no componente pai
+      // 1. Mostra o container no componente pai imediatamente
       props.onShowDice();
 
-      // 2. Reinicia e reproduz o vídeo do zero imediatamente
+      // 2. Reinicia e reproduz o vídeo do zero
       if (diceVideo.current) {
         diceVideo.current.currentTime = 0;
         diceVideo.current.play().catch(() => {});
       }
 
-      // 3. Define o resultado imediatamente para aparecer junto com a animação
+      // 3. Define o resultado IMEDIATAMENTE para aparecer junto com a animação no 1º lançamento
       setDiceResult(rollVal);
       setDiceDescription(desc || null);
 
-      // 4. Mantém visível durante o tempo da animação (2 segundos)
-      await sleep(2000);
+      // 4. Mantém visível durante 2.5 segundos
+      await sleep(2500);
 
       // 5. Limpa os estados e oculta
       setDiceResult(null);
       setDiceDescription(null);
       props.onHideDice();
 
-      await sleep(400);
+      await sleep(300);
 
-      // 6. Processa o próximo da fila se houver
+      // 6. Processa a fila de rolagens se houver mais alguma
       const next = queueRef.current.shift();
       if (next) {
-        runAnimation(next.roll, next.description);
+        playRoll(next.roll, next.description);
       } else {
-        isRunningRef.current = false;
+        isPlayingRef.current = false;
       }
     }
-
-    const unsubRoll = on('diceRoll', (payload) => {
-      if (payload.playerId !== props.playerId) return;
-      props.onShowDice();
-      if (diceVideo.current) {
-        diceVideo.current.currentTime = 0;
-        diceVideo.current.play().catch(() => {});
-      }
-    });
 
     const unsubResult = on('diceResult', (payload) => {
       if (payload.playerId !== props.playerId) return;
@@ -105,16 +96,27 @@ export default function PortraitDiceContainer(props: {
         desc = results.map((d: any) => d.resultType?.description).filter(Boolean).join(' - ');
       }
 
-      if (isRunningRef.current) {
+      if (isPlayingRef.current) {
         queueRef.current.push({ roll: rollVal, description: desc });
       } else {
-        runAnimation(rollVal, desc);
+        playRoll(rollVal, desc);
+      }
+    });
+
+    const unsubRoll = on('diceRoll', (payload) => {
+      if (payload.playerId !== props.playerId) return;
+      if (!isPlayingRef.current) {
+        props.onShowDice();
+        if (diceVideo.current) {
+          diceVideo.current.currentTime = 0;
+          diceVideo.current.play().catch(() => {});
+        }
       }
     });
 
     return () => {
-      unsubRoll?.();
       unsubResult?.();
+      unsubRoll?.();
     };
   }, [props.showDiceRoll, props.playerId, props.color]);
 

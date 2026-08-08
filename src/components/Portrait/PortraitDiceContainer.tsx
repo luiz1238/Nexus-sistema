@@ -18,19 +18,17 @@ export default function PortraitDiceContainer(props: {
   debug?: boolean;
   layout?: LayoutData | null;
 }) {
-  const isProcessing = useRef(false);
-  const queue = useRef<any[]>([]);
   const { on } = useRealtime();
 
   const [diceResult, setDiceResult] = useState<number | string | null>(null);
   const [diceDescription, setDiceDescription] = useState<string | null>(null);
-  
-  const lastDiceResult = useRef<number | string>(0);
-  const lastDiceDescription = useRef<string>('');
-  
+
   const diceResultRef = useRef<HTMLDivElement>(null);
   const diceDescriptionRef = useRef<HTMLDivElement>(null);
   const diceVideo = useRef<HTMLVideoElement>(null);
+
+  const queueRef = useRef<{ roll: number | string; description?: string }[]>([]);
+  const isRunningRef = useRef(false);
 
   useEffect(() => {
     if (!props.showDiceRoll) return;
@@ -45,10 +43,10 @@ export default function PortraitDiceContainer(props: {
       diceDescriptionRef.current.style.textShadow = style.textShadow;
     }
 
-    async function processRoll(rollVal: number | string, desc?: string) {
-      isProcessing.current = true;
+    async function runAnimation(rollVal: number | string, desc?: string) {
+      isRunningRef.current = true;
 
-      // 1. Ativa a exibição no componente pai (mostra o container)
+      // 1. Mostra o container no componente pai
       props.onShowDice();
 
       // 2. Reinicia e reproduz o vídeo do zero imediatamente
@@ -57,39 +55,39 @@ export default function PortraitDiceContainer(props: {
         diceVideo.current.play().catch(() => {});
       }
 
-      // 3. Atualiza os estados e os refs de fallback para o texto nunca falhar
-      lastDiceResult.current = rollVal;
+      // 3. Define o resultado imediatamente para aparecer junto com a animação
       setDiceResult(rollVal);
+      setDiceDescription(desc || null);
 
-      if (desc) {
-        lastDiceDescription.current = desc;
-        setDiceDescription(desc);
-      } else {
-        lastDiceDescription.current = '';
-        setDiceDescription(null);
-      }
+      // 4. Mantém visível durante o tempo da animação (2 segundos)
+      await sleep(2000);
 
-      // 4. Mantém o dado visível durante o tempo da animação (2.2 segundos)
-      await sleep(2200);
-
-      // 5. Limpa os textos
+      // 5. Limpa os estados e oculta
       setDiceResult(null);
       setDiceDescription(null);
-
-      // 6. Oculta o container no componente pai
       props.onHideDice();
-      await sleep(500);
 
-      // 7. Processa o próximo da fila se houver, ou liberta o estado
-      const next = queue.current.shift();
+      await sleep(400);
+
+      // 6. Processa o próximo da fila se houver
+      const next = queueRef.current.shift();
       if (next) {
-        processRoll(next.roll, next.description);
+        runAnimation(next.roll, next.description);
       } else {
-        isProcessing.current = false;
+        isRunningRef.current = false;
       }
     }
 
-    const handleResultPayload = (payload: any) => {
+    const unsubRoll = on('diceRoll', (payload) => {
+      if (payload.playerId !== props.playerId) return;
+      props.onShowDice();
+      if (diceVideo.current) {
+        diceVideo.current.currentTime = 0;
+        diceVideo.current.play().catch(() => {});
+      }
+    });
+
+    const unsubResult = on('diceResult', (payload) => {
       if (payload.playerId !== props.playerId) return;
       const { results, dices } = payload;
       if (!results || results.length === 0) return;
@@ -107,27 +105,16 @@ export default function PortraitDiceContainer(props: {
         desc = results.map((d: any) => d.resultType?.description).filter(Boolean).join(' - ');
       }
 
-      if (isProcessing.current) {
-        queue.current.push({ roll: rollVal, description: desc });
+      if (isRunningRef.current) {
+        queueRef.current.push({ roll: rollVal, description: desc });
       } else {
-        processRoll(rollVal, desc);
-      }
-    };
-
-    const unsub1 = on('diceRoll', (payload) => {
-      if (payload.playerId !== props.playerId) return;
-      props.onShowDice();
-      if (diceVideo.current) {
-        diceVideo.current.currentTime = 0;
-        diceVideo.current.play().catch(() => {});
+        runAnimation(rollVal, desc);
       }
     });
 
-    const unsub2 = on('diceResult', handleResultPayload);
-
     return () => {
-      unsub1?.();
-      unsub2?.();
+      unsubRoll?.();
+      unsubResult?.();
     };
   }, [props.showDiceRoll, props.playerId, props.color]);
 
@@ -157,10 +144,10 @@ export default function PortraitDiceContainer(props: {
         {(isDebugMode || diceResult !== null || diceDescription !== null) && (
           <div className={styles.diceTextGroup}>
             <div className={styles.result} ref={diceResultRef}>
-              {isDebugMode ? '42' : (diceResult || lastDiceResult.current || '')}
+              {isDebugMode ? '42' : (diceResult ?? '')}
             </div>
             <div className={styles.description} ref={diceDescriptionRef}>
-              {isDebugMode ? 'Crítico' : (diceDescription || lastDiceDescription.current || '')}
+              {isDebugMode ? 'Crítico' : (diceDescription ?? '')}
             </div>
           </div>
         )}

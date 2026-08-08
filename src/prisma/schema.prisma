@@ -136,15 +136,18 @@ model Spell {
   id          Int           @id @default(autoincrement())
   name        String
   description String
-  cost String
-  type String
-  damage String
+  cost        String
+  type        String
+  damage      String
   target      String
   castingTime String
   range       String
   duration    String
   slots       Int
   visible     Boolean
+  sanity      String        @default("-")
+  resistance  String        @default("-")
+  symbol      String        @default("-")
   PlayerSpell PlayerSpell[]
 }
 

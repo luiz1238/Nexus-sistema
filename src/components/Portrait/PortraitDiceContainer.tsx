@@ -21,12 +21,19 @@ export default function PortraitDiceContainer(props: {
   const { on } = useRealtime();
   
   const [isRolling, setIsRolling] = useState(false);
+  const isRollingRef = useRef(false); // Ref para evitar recriar os listeners do socket
+  
   const [diceResult, setDiceResult] = useState<number | null>(null);
   const [diceDescription, setDiceDescription] = useState<string | null>(null);
   
   const diceVideo = useRef<HTMLVideoElement | null>(null);
   const diceResultRef = useRef<HTMLDivElement | null>(null);
   const diceDescriptionRef = useRef<HTMLDivElement | null>(null);
+
+  // Atualiza o ref sempre que o estado muda
+  useEffect(() => {
+    isRollingRef.current = isRolling;
+  }, [isRolling]);
 
   // Aplica as cores personalizadas do atributo
   useEffect(() => {
@@ -41,18 +48,18 @@ export default function PortraitDiceContainer(props: {
     }
   }, [props.color, diceResult, diceDescription]);
 
-  // Função para filtrar e permitir APENAS atributos, perícias e características
+  // Filtro para ignorar dano e customizados, permitindo apenas atributos, perícias e características
   function shouldIgnoreRoll(payload: any): boolean {
     const resolverKey = String(payload.resolverKey || '').toLowerCase();
     
-    // Termos que devem ser IGNORADOS no Portrait (dano, customizados, armas, etc.)
+    // Termos de dano ou customizados que NÃO devem aparecer no Portrait
     const excludedKeywords = ['damage', 'dano', 'custom', 'personalizado', 'weapon', 'arma'];
     
     if (excludedKeywords.some(keyword => resolverKey.includes(keyword))) {
-      return true; // Ignora (não mostra no portrait)
+      return true; // Ignora
     }
     
-    return false; // Permite (mostra atributos, perícias e características)
+    return false; // Permite (atributos, perícias e características)
   }
 
   async function triggerDiceAnimation(result: DiceResponse) {
@@ -64,7 +71,7 @@ export default function PortraitDiceContainer(props: {
         diceVideo.current.currentTime = 0;
         await diceVideo.current.play();
       } catch (err) {
-        console.error("Erro ao reproduzir vídeo no OBS:", err);
+        console.error("Erro ao reproduzir vídeo:", err);
       }
     }
 
@@ -88,19 +95,20 @@ export default function PortraitDiceContainer(props: {
   }
 
   const handleNewResult = (result: DiceResponse) => {
-    if (isRolling) {
+    if (isRollingRef.current) {
       diceQueue.current.push(result);
     } else {
       triggerDiceAnimation(result);
     }
   };
 
+  // Configuração dos sockets (executada apenas uma vez ao montar)
   useEffect(() => {
     const unsub1 = on('diceRoll', (payload) => {
       if (payload.playerId !== props.playerId) return;
       if (shouldIgnoreRoll(payload)) return; // Ignora se for dano/custom
 
-      if (!isRolling) {
+      if (!isRollingRef.current) {
         setIsRolling(true);
         props.onShowDice();
         if (diceVideo.current) {
@@ -134,7 +142,7 @@ export default function PortraitDiceContainer(props: {
       unsub1?.();
       unsub2?.();
     };
-  }, [props.playerId, isRolling]);
+  }, [props.playerId]); // Dependência limpa apenas no playerId
 
   const isDebugMode = !!props.debug;
   const showContent = isDebugMode || isAccessible(isRolling, diceResult);

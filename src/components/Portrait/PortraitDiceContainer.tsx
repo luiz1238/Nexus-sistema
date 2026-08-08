@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import Fade from 'react-bootstrap/Fade';
 import useRealtime from '../../hooks/useRealtime';
 import styles from '../../styles/modules/Portrait.module.scss';
 import { sleep } from '../../utils';
@@ -18,75 +17,67 @@ export default function PortraitDiceContainer(props: {
   debug?: boolean;
   layout?: LayoutData | null;
 }) {
-  const diceQueue = useRef<DiceResponse[]>([]);
-  const diceData = useRef<DiceResponse>();
-
-  const showDiceRef = useRef(props.showDice);
   const { on } = useRealtime();
-
+  
   const [diceResult, setDiceResult] = useState<number | null>(null);
-  const diceResultRef = useRef<HTMLDivElement>(null);
-  const lastDiceResult = useRef(0);
   const [diceDescription, setDiceDescription] = useState<string | null>(null);
-  const diceDescriptionRef = useRef<HTMLDivElement>(null);
-  const lastDiceDescription = useRef('');
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const diceVideo = useRef<HTMLVideoElement>(null);
+  const diceResultRef = useRef<HTMLDivElement>(null);
+  const diceDescriptionRef = useRef<HTMLDivElement>(null);
+  const lastDiceResult = useRef(0);
+  const lastDiceDescription = useRef('');
 
-  // Mantém o ref sincronizado com a prop do pai para evitar travamentos
+  // Fila para gerenciar múltiplas rolagens em sequência sem travamentos
+  const queue = useRef<DiceResponse[]>([]);
+  const isProcessing = useRef(false);
+
+  // Aplica as cores personalizadas do atributo
   useEffect(() => {
-    showDiceRef.current = props.showDice;
-  }, [props.showDice]);
-
-  useEffect(() => {
-    if (!props.showDiceRoll) return;
-
     const style = getAttributeStyle(props.color);
-
     if (diceResultRef.current) {
       diceResultRef.current.style.color = style.color;
       diceResultRef.current.style.textShadow = style.textShadow;
     }
-
     if (diceDescriptionRef.current) {
       diceDescriptionRef.current.style.color = style.color;
       diceDescriptionRef.current.style.textShadow = style.textShadow;
     }
+  }, [props.color, diceResult, diceDescription]);
 
-    function showDiceRoll() {
-      if (showDiceRef.current) return;
-      showDiceRef.current = true;
+  async function processQueue() {
+    if (isProcessing.current) return;
+    isProcessing.current = true;
+
+    while (queue.current.length > 0) {
+      const result = queue.current.shift();
+      if (!result) continue;
+
+      setIsPlaying(true);
+      props.onShowDice();
+
       if (diceVideo.current) {
-        props.onShowDice();
-        diceVideo.current.currentTime = 0;
-        // Tratamento da promessa para evitar falhas no OBS
-        diceVideo.current.play().catch((err) => {
-          console.error("Erro ao reproduzir vídeo no OBS:", err);
-        });
+        try {
+          diceVideo.current.currentTime = 0;
+          await diceVideo.current.play();
+        } catch (e) {
+          // Evita crash caso o navegador interrompa a reprodução
+        }
       }
-    }
 
-    async function showNextResult(result: DiceResponse) {
-      showDiceRoll();
       await sleep(750);
-      diceData.current = undefined;
-      onDiceResult(result);
-    }
-
-    async function onDiceResult(result: DiceResponse) {
-      if (diceData.current) return diceQueue.current.push(result);
-      if (!showDiceRef.current) return showNextResult(result);
-
-      diceData.current = result;
-
+      
       lastDiceResult.current = result.roll;
       setDiceResult(result.roll);
 
       if (result.resultType) {
         lastDiceDescription.current = result.resultType.description;
-        await sleep(750);
         setDiceDescription(result.resultType.description);
+      } else {
+        setDiceDescription(null);
       }
+
       await sleep(1500);
 
       setDiceResult(null);
@@ -94,40 +85,45 @@ export default function PortraitDiceContainer(props: {
 
       await sleep(250);
       props.onHideDice();
-      await sleep(600);
-      showDiceRef.current = false;
-
-      const next = diceQueue.current.shift();
-      if (next) showNextResult(next);
-      else diceData.current = undefined;
+      setIsPlaying(false);
+      await sleep(200);
     }
+
+    isProcessing.current = false;
+  }
+
+  function handleRoll(result: DiceResponse) {
+    queue.current.push(result);
+    processQueue();
+  }
+
+  useEffect(() => {
+    if (!props.showDiceRoll) return;
 
     const unsub1 = on('diceRoll', (payload) => {
       if (payload.playerId !== props.playerId) return;
-      showDiceRoll();
     });
 
     const unsub2 = on('diceResult', (payload) => {
       if (payload.playerId !== props.playerId) return;
       const { results, dices } = payload;
 
-      if (results.length === 1) return onDiceResult(results[0]);
-
-      if (Array.isArray(dices)) {
-        onDiceResult({
+      if (results.length === 1) {
+        handleRoll(results[0]);
+      } else if (Array.isArray(dices)) {
+        handleRoll({
           roll: results.reduce((prev, cur) => prev + cur.roll, 0),
         });
-      } else {
-        if (diceData.current) return diceQueue.current.push(...results);
-        const first = results.shift();
-        if (!first) return;
-        diceQueue.current.push(...results);
-        onDiceResult(first);
+      } else if (results.length > 0) {
+        results.forEach(r => handleRoll(r));
       }
     });
 
-    return () => { unsub1?.(); unsub2?.(); };
-  }, [props.showDiceRoll, props.playerId, props.color]);
+    return () => {
+      unsub1?.();
+      unsub2?.();
+    };
+  }, [props.showDiceRoll, props.playerId]);
 
   const isDebugMode = !!props.debug;
 
@@ -147,7 +143,7 @@ export default function PortraitDiceContainer(props: {
         <video
           muted
           playsInline
-          className={`${isDebugMode ? styles.diceDebug : `popout${props.showDice ? ' show' : ''} ${styles.dice}`}`}
+          className={`${isDebugMode ? styles.diceDebug : `popout${props.showDice || isPlaying ? ' show' : ''} ${styles.dice}`}`}
           ref={diceVideo}
           preload="auto"
         >

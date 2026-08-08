@@ -43,11 +43,12 @@ export default function PortraitDiceContainer(props: {
     }
   }, [props.color, diceResult, diceDescription]);
 
-  // Filtro: Apenas atributos, perícias e características (ignora dano e customizados)
+  // Filtro: Exibe APENAS atributos, perícias e características (ignora dano e customizados)
   function shouldIgnoreRoll(payload: any): boolean {
     const resolverKey = String(payload?.resolverKey || '').toLowerCase();
+    const title = String(payload?.title || payload?.description || '').toLowerCase();
     const excluded = ['damage', 'dano', 'custom', 'personalizado', 'weapon', 'arma'];
-    return excluded.some((keyword) => resolverKey.includes(keyword));
+    return excluded.some((keyword) => resolverKey.includes(keyword) || title.includes(keyword));
   }
 
   async function processQueue() {
@@ -61,7 +62,7 @@ export default function PortraitDiceContainer(props: {
       setIsRolling(true);
       props.onShowDice();
 
-      // Tenta rodar o vídeo no OBS com fallback caso o motor do OBS bloqueie media
+      // Reproduz o vídeo uma única vez, sem conflitos
       if (diceVideo.current) {
         try {
           diceVideo.current.currentTime = 0;
@@ -71,8 +72,8 @@ export default function PortraitDiceContainer(props: {
         }
       }
 
-      // Tempo de espera da animação antes de mostrar o número
-      await sleep(500);
+      // Aguarda 450ms: momento exato em que o dado atinge o centro da tela na animação
+      await sleep(450);
 
       setDiceResult(current.roll);
       if (current.resultType?.description) {
@@ -81,10 +82,10 @@ export default function PortraitDiceContainer(props: {
         setDiceDescription(null);
       }
 
-      // Mantém visível por 2.5 segundos
-      await sleep(2500);
+      // Mantém o dado e o número visíveis por 3 segundos
+      await sleep(3000);
 
-      // Limpa os estados e oculta
+      // Limpa os estados e oculta o container
       setDiceResult(null);
       setDiceDescription(null);
       setIsRolling(false);
@@ -102,22 +103,9 @@ export default function PortraitDiceContainer(props: {
   }
 
   useEffect(() => {
-    // Escuta evento de rolagem (start)
-    const unsub1 = on('diceRoll', (payload) => {
-      if (Number(payload.playerId) !== Number(props.playerId)) return;
-      if (shouldIgnoreRoll(payload)) return;
-
-      setIsRolling(true);
-      props.onShowDice();
-      if (diceVideo.current) {
-        diceVideo.current.currentTime = 0;
-        diceVideo.current.play().catch(() => {});
-      }
-    });
-
-    // Escuta evento de resultado (result)
-    const unsub2 = on('diceResult', (payload) => {
-      // Conversão explícita para Number para evitar erro "1" !== 1
+    // IMPORTANTE: Reagimos APENAS a 'diceResult' quando o resultado já está pronto.
+    // Isso elimina a rolagem vazia sem número e a travada na transição do vídeo!
+    const unsub = on('diceResult', (payload) => {
       if (Number(payload.playerId) !== Number(props.playerId)) return;
       if (shouldIgnoreRoll(payload)) return;
 
@@ -134,8 +122,7 @@ export default function PortraitDiceContainer(props: {
     });
 
     return () => {
-      unsub1?.();
-      unsub2?.();
+      unsub?.();
     };
   }, [props.playerId]);
 
@@ -155,7 +142,6 @@ export default function PortraitDiceContainer(props: {
       playerId={props.playerId}
     >
       <div className={styles.diceContainerInner}>
-        {/* O src direto na tag <video> resolve o problema de reprodução no OBS CEF */}
         <video
           src="/dice_animation.webm"
           muted

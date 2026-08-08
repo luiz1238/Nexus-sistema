@@ -1,151 +1,179 @@
-import React, { useEffect, useState, useRef } from 'react';
-import styles from '@/styles/modules/Portrait.module.scss';
-import io from 'socket.io-client';
+import { useEffect, useRef, useState } from 'react';
+import useRealtime from '../../hooks/useRealtime';
+import styles from '../../styles/modules/Portrait.module.scss';
+import { sleep } from '../../utils';
+import type { DiceResponse } from '../../utils/dice';
+import { getAttributeStyle } from '../../utils/style';
+import PortraitDraggableResizable from './PortraitDraggableResizable';
+import type { LayoutData } from './PortraitDraggableResizable';
 
-interface DiceData {
-  dice: string;
-  result: number | string;
-  rollerName?: string;
-  resolverKey?: string;
-  type?: string;
-}
-
-export default function PortraitDiceContainer({ characterID }: { characterID: string }) {
-  const [currentRoll, setCurrentRoll] = useState<DiceData | null>(null);
-  const [isVisible, setIsVisible] = useState(false);
-  const [videoSrc, setVideoSrc] = useState<string>('');
+export default function PortraitDiceContainer(props: {
+  playerId: number;
+  showDice: boolean;
+  onShowDice: () => void;
+  onHideDice: () => void;
+  color: string;
+  showDiceRoll: boolean;
+  debug?: boolean;
+  layout?: LayoutData | null;
+}) {
+  const { on } = useRealtime();
   
-  const queueRef = useRef<DiceData[]>([]);
-  const isProcessingRef = useRef(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const [diceResult, setDiceResult] = useState<number | null>(null);
+  const [diceDescription, setDiceDescription] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
 
-  // Filtro: SÓ exibe atributos, perícias e características (ignora dano e customizados)
-  const shouldShowRoll = (data: any) => {
-    const key = (data?.resolverKey || data?.type || '').toLowerCase();
+  const diceVideo = useRef<HTMLVideoElement>(null);
+  const diceResultRef = useRef<HTMLDivElement>(null);
+  const diceDescriptionRef = useRef<HTMLDivElement>(null);
+  const lastDiceResult = useRef(0);
+  const lastDiceDescription = useRef('');
+
+  // Fila para gerenciar rolagens em sequência sem travamentos
+  const queue = useRef<DiceResponse[]>([]);
+  const isProcessing = useRef(false);
+
+  // Aplica as cores personalizadas do atributo
+  useEffect(() => {
+    const style = getAttributeStyle(props.color);
+    if (diceResultRef.current) {
+      diceResultRef.current.style.color = style.color;
+      diceResultRef.current.style.textShadow = style.textShadow;
+    }
+    if (diceDescriptionRef.current) {
+      diceDescriptionRef.current.style.color = style.color;
+      diceDescriptionRef.current.style.textShadow = style.textShadow;
+    }
+  }, [props.color, diceResult, diceDescription]);
+
+  // Filtro: Permite apenas atributos, perícias e características (ignora dano e customizados)
+  function shouldIgnoreRoll(payload: any): boolean {
+    const resolverKey = String(payload.resolverKey || '').toLowerCase();
+    const excludedKeywords = ['damage', 'dano', 'custom', 'personalizado', 'weapon', 'arma'];
     
-    // Bloqueia explicitamente dano e personalizados
-    if (
-      key.includes('damage') || 
-      key.includes('dano') || 
-      key.includes('custom') || 
-      key.includes('personalizado')
-    ) {
-      return false;
+    if (excludedKeywords.some(keyword => resolverKey.includes(keyword))) {
+      return true; // Ignora
     }
+    return false; // Permite
+  }
 
-    // Permite atributos, perícias e características
-    const allowed = ['attribute', 'attr', 'skill', 'pericia', 'characteristic', 'caracteristica'];
-    if (allowed.some(term => key.includes(term))) {
-      return true;
-    }
+  async function processQueue() {
+    if (isProcessing.current) return;
+    isProcessing.current = true;
 
-    // Se vier sem chave específica, por padrão permite rolagens normais da ficha
-    return true;
-  };
+    while (queue.current.length > 0) {
+      const result = queue.current.shift();
+      if (!result) continue;
 
-  const processQueue = async () => {
-    if (isProcessingRef.current) return;
-    isProcessingRef.current = true;
+      setIsPlaying(true);
+      props.onShowDice();
 
-    while (queueRef.current.length > 0) {
-      const roll = queueRef.current.shift();
-      if (!roll) continue;
-
-      setCurrentRoll(roll);
-      
-      // Define o vídeo com base no dado (ex: d20 -> dice20.webm)
-      const diceMatch = String(roll.dice || 'd20').match(/\d+/);
-      const diceNumber = diceMatch ? diceMatch[0] : '20';
-      setVideoSrc(`/dice${diceNumber}.webm`);
-      
-      setIsVisible(true);
-
-      // Reprodução com garantia de timeout (fallback para evitar travamento no OBS)
-      await new Promise<void>((resolve) => {
-        const videoEl = videoRef.current;
-        let timeoutId: NodeJS.Timeout;
-
-        const cleanup = () => {
-          if (videoEl) {
-            videoEl.removeEventListener('ended', handleEnded);
-            videoEl.removeEventListener('error', handleError);
-          }
-          clearTimeout(timeoutId);
-        };
-
-        const finish = () => {
-          cleanup();
-          resolve();
-        };
-
-        const handleEnded = () => finish();
-        const handleError = () => finish();
-
-        if (videoEl) {
-          videoEl.currentTime = 0;
-          videoEl.play().then(() => {
-            videoEl.addEventListener('ended', handleEnded, { once: true });
-            videoEl.addEventListener('error', handleError, { once: true });
-            // Timeout de segurança caso o vídeo demore ou o evento ended falhe no OBS
-            timeoutId = setTimeout(finish, 3500);
-          }).catch(() => {
-            // Se o autoplay for bloqueado ou falhar, aguarda via timer
-            timeoutId = setTimeout(finish, 2000);
-          });
-        } else {
-          timeoutId = setTimeout(finish, 2000);
+      if (diceVideo.current) {
+        try {
+          diceVideo.current.currentTime = 0;
+          await diceVideo.current.play();
+        } catch (e) {
+          // Ignora restrições de autoplay
         }
-      });
+      }
 
-      // Oculta brevemente antes da próxima animação da fila
-      setIsVisible(false);
-      await new Promise(r => setTimeout(r, 200));
+      await sleep(400);
+      
+      lastDiceResult.current = result.roll;
+      setDiceResult(result.roll);
+
+      if (result.resultType) {
+        lastDiceDescription.current = result.resultType.description;
+        setDiceDescription(result.resultType.description);
+      } else {
+        setDiceDescription(null);
+      }
+
+      await sleep(1500);
+
+      setDiceResult(null);
+      setDiceDescription(null);
+
+      await sleep(200);
+      props.onHideDice();
+      setIsPlaying(false);
+      await sleep(100);
     }
 
-    isProcessingRef.current = false;
-  };
+    isProcessing.current = false;
+  }
 
-  const enqueueRoll = (rollData: DiceData) => {
-    if (!shouldShowRoll(rollData)) return;
-    
-    queueRef.current.push(rollData);
+  function handleRoll(result: DiceResponse) {
+    queue.current.push(result);
     processQueue();
-  };
+  }
 
   useEffect(() => {
-    const socket = io();
+    if (!props.showDiceRoll) return;
 
-    socket.on(`diceRoll:${characterID}`, (data: DiceData) => {
-      enqueueRoll(data);
+    const unsub1 = on('diceRoll', (payload) => {
+      if (payload.playerId !== props.playerId) return;
+      if (shouldIgnoreRoll(payload)) return;
     });
 
-    socket.on('diceRoll', (data: any) => {
-      if (data && (data.characterID === characterID || !data.characterID)) {
-        enqueueRoll(data);
+    const unsub2 = on('diceResult', (payload) => {
+      if (payload.playerId !== props.playerId) return;
+      if (shouldIgnoreRoll(payload)) return;
+
+      const { results, dices } = payload;
+
+      if (results.length === 1) {
+        handleRoll(results[0]);
+      } else if (Array.isArray(dices)) {
+        handleRoll({
+          roll: results.reduce((prev, cur) => prev + cur.roll, 0),
+        });
+      } else if (results.length > 0) {
+        results.forEach(r => handleRoll(r));
       }
     });
 
     return () => {
-      socket.disconnect();
+      unsub1?.();
+      unsub2?.();
     };
-  }, [characterID]);
+  }, [props.showDiceRoll, props.playerId]);
+
+  const isDebugMode = !!props.debug;
 
   return (
-    <div className={`${styles.diceContainer} ${isVisible ? styles.visible : styles.hidden}`}>
-      {videoSrc && (
+    <PortraitDraggableResizable
+      storageKey="dice"
+      label="Dado"
+      defaultPosition={{ x: 30, y: 500 }}
+      defaultSize={{ width: 360, height: 150 }}
+      defaultFontSize={64}
+      layout={props.layout}
+      debug={props.debug}
+      zIndex={200}
+      playerId={props.playerId}
+    >
+      <div className={styles.diceContainerInner}>
         <video
-          ref={videoRef}
-          src={videoSrc}
           muted
           playsInline
-          className={styles.diceVideo}
-        />
-      )}
-      {isVisible && currentRoll && (
-        <div className={styles.diceResultOverlay}>
-          <span className={styles.diceNumberText}>{currentRoll.result}</span>
-        </div>
-      )}
-    </div>
+          className={`${isDebugMode ? styles.diceDebug : `popout${props.showDice || isPlaying ? ' show' : ''} ${styles.dice}`}`}
+          ref={diceVideo}
+          preload="auto"
+        >
+          <source src='/dice_animation.webm' />
+        </video>
+        {(isDebugMode || diceResult !== null || diceDescription !== null) && (
+          <div className={styles.diceTextGroup}>
+            <div className={styles.result} ref={diceResultRef}>
+              {isDebugMode ? '42' : (diceResult || lastDiceResult.current || '')}
+            </div>
+            <div className={styles.description} ref={diceDescriptionRef}>
+              {isDebugMode ? 'Crítico' : (diceDescription || lastDiceDescription.current || '')}
+            </div>
+          </div>
+        )}
+      </div>
+    </PortraitDraggableResizable>
   );
 }

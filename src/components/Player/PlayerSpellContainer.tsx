@@ -16,12 +16,18 @@ import { resolveDices } from '../../utils/dice';
 import type { DiceRollEvent } from '../../hooks/useDiceRoll';
 import DiceRollModal from '../Modals/DiceRollModal';
 import useDiceRoll from '../../hooks/useDiceRoll';
-import SpellEditorModal from '../Modals/SpellEditorModal';
+import SpellEditorModal, { RitualData } from '../Modals/SpellEditorModal';
+
+type SpellType = Spell & {
+	sanity?: string;
+	resistance?: string;
+	symbol?: string;
+};
 
 type PlayerSpellContainerProps = {
 	title: string;
-	playerSpells: Spell[];
-	availableSpells: Spell[];
+	playerSpells: SpellType[];
+	availableSpells: SpellType[];
 	playerMaxSlots: number;
 	npcId?: number;
 };
@@ -31,7 +37,7 @@ export default function PlayerSpellContainer(props: PlayerSpellContainerProps) {
 	const [availableSpells, setAvailableSpells] = useState<{ id: number; name: string }[]>(
 		props.availableSpells
 	);
-	const [playerSpells, setPlayerSpells] = useState(props.playerSpells);
+	const [playerSpells, setPlayerSpells] = useState<SpellType[]>(props.playerSpells);
 	const [maxSlots, setMaxSlots, isClean] = useExtendedState(
 		props.playerMaxSlots.toString()
 	);
@@ -39,16 +45,16 @@ export default function PlayerSpellContainer(props: PlayerSpellContainerProps) {
 
 	// Estados do Modal de Edição/Criação
 	const [spellEditorModalShow, setSpellEditorModalShow] = useState(false);
-	const [spellEditorData, setSpellEditorData] = useState<Spell | undefined>(undefined);
+	const [spellEditorData, setSpellEditorData] = useState<SpellType | undefined>(undefined);
 	const [spellEditorOperation, setSpellEditorOperation] = useState<'create' | 'edit'>('create');
 
-  const logError = useContext(ErrorLogger);
-  const { on } = useRealtime();
-  const [diceRoll, rollDice] = useDiceRoll(props.npcId);
+	const logError = useContext(ErrorLogger);
+	const { on } = useRealtime();
+	const [diceRoll, rollDice] = useDiceRoll(props.npcId);
 
-  const socket_spellAdd = useRef<(id: number, name: string) => void>(() => {});
-  const socket_spellRemove = useRef<(id: number) => void>(() => {});
-  const socket_spellChange = useRef<(sp: Spell) => void>(() => {});
+	const socket_spellAdd = useRef<(id: number, name: string) => void>(() => {});
+	const socket_spellRemove = useRef<(id: number) => void>(() => {});
+	const socket_spellChange = useRef<(sp: SpellType) => void>(() => {});
 
 	useEffect(() => {
 		socket_spellAdd.current = (id, name) => {
@@ -100,16 +106,16 @@ export default function PlayerSpellContainer(props: PlayerSpellContainerProps) {
 		};
 	});
 
-  useEffect(() => {
-    const unsubs: (() => void)[] = [];
-    unsubs.push(on('spellAdd', (payload) => socket_spellAdd.current(payload.id, payload.name)));
-    unsubs.push(on('spellRemove', (payload) => socket_spellRemove.current(payload.id)));
-    unsubs.push(on('spellChange', (payload) => socket_spellChange.current(payload.spell)));
-    return () => { unsubs.forEach(u => u()); };
-  }, [on]);
+	useEffect(() => {
+		const unsubs: (() => void)[] = [];
+		unsubs.push(on('spellAdd', (payload) => socket_spellAdd.current(payload.id, payload.name)));
+		unsubs.push(on('spellRemove', (payload) => socket_spellRemove.current(payload.id)));
+		unsubs.push(on('spellChange', (payload) => socket_spellChange.current(payload.spell)));
+		return () => { unsubs.forEach(u => u()); };
+	}, [on]);
 
 	// Lógica de Criar Magia Customizada
-	function onSpellCreateSubmit(spell: Spell) {
+	function onSpellCreateSubmit(spell: RitualData) {
 		setLoading(true);
 		api
 			.put('/sheet/spell', spell)
@@ -117,7 +123,7 @@ export default function PlayerSpellContainer(props: PlayerSpellContainerProps) {
 				return api.put('/sheet/player/spell', { id: res.data.id, npcId: props.npcId });
 			})
 			.then((res) => {
-				const newSpell = res.data.spell as Spell;
+				const newSpell = res.data.spell as SpellType;
 				setPlayerSpells([...playerSpells, newSpell]);
 				setSpellEditorModalShow(false);
 			})
@@ -126,7 +132,7 @@ export default function PlayerSpellContainer(props: PlayerSpellContainerProps) {
 	}
 
 	// Lógica de Editar Magia (Duplo Clique)
-	function onSpellEditSubmit(spell: Spell) {
+	function onSpellEditSubmit(spell: RitualData) {
 		setLoading(true);
 		api
 			.post('/sheet/spell', spell)
@@ -142,7 +148,7 @@ export default function PlayerSpellContainer(props: PlayerSpellContainerProps) {
 		api
 			.put('/sheet/player/spell', { id, npcId: props.npcId })
 			.then((res) => {
-				const spell = res.data.spell as Spell;
+				const spell = res.data.spell as SpellType;
 				setPlayerSpells([...playerSpells, spell]);
 
 				const newSpells = [...availableSpells];
@@ -160,7 +166,7 @@ export default function PlayerSpellContainer(props: PlayerSpellContainerProps) {
 	}
 
 	function onDeleteSpell(id: number) {
-		const newPlayerSpells =[...playerSpells];
+		const newPlayerSpells = [...playerSpells];
 		const index = newPlayerSpells.findIndex((spell) => spell.id === id);
 
 		newPlayerSpells.splice(index, 1);
@@ -249,7 +255,7 @@ export default function PlayerSpellContainer(props: PlayerSpellContainerProps) {
 			<SpellEditorModal
 				show={spellEditorModalShow}
 				onHide={() => setSpellEditorModalShow(false)}
-				data={spellEditorData as Spell}
+				data={spellEditorData as RitualData}
 				operation={spellEditorOperation}
 				onSubmit={(spell) => {
 					if (spellEditorOperation === 'create') onSpellCreateSubmit(spell);
@@ -263,7 +269,7 @@ export default function PlayerSpellContainer(props: PlayerSpellContainerProps) {
 }
 
 type PlayerSpellFieldProps = {
-	spell: Spell;
+	spell: SpellType;
 	onDelete: (id: number) => void;
 	showDiceRollResult: DiceRollEvent;
 	onEditBase: () => void;
@@ -301,6 +307,18 @@ function PlayerSpellField({
 		<Col xs={12} className='mb-3 w-100 text-center'>
 			<Row>
 				<Col className='data-container mx-3'>
+					{/* Símbolo do Ritual se existir e não for '-' */}
+					{spell.symbol && spell.symbol !== '-' && (
+						<Row className='mt-3 justify-content-center'>
+							<Col xs='auto'>
+								<Image
+									src={spell.symbol}
+									alt={spell.name}
+									style={{ maxHeight: '8rem', objectFit: 'contain' }}
+								/>
+							</Col>
+						</Row>
+					)}
 					<Row className='mt-2'>
 						<Col 
 							className='h2'
@@ -316,7 +334,7 @@ function PlayerSpellField({
 								size='sm'
 								style={{ verticalAlign: 'middle', textDecoration: 'none' }}
 								onClick={(e) => {
-									e.stopPropagation(); // Impede o clique de ativar o duplo clique sem querer
+									e.stopPropagation();
 									deleteSpell();
 								}}
 								disabled={loading}>
@@ -325,13 +343,21 @@ function PlayerSpellField({
 						</Col>
 					</Row>
 					<Row>
-						<Col className='h5 spell-description'>{spell.description}</Col>
+						<Col className='h5 spell-description' style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+							{spell.description}
+						</Col>
 					</Row>
 					<Row className='mb-2'>
 						<Col>Custo: {spell.cost}</Col>
 					</Row>
+					{/* Sanidade (se preenchido e não for '-') */}
+					{spell.sanity && spell.sanity !== '-' && (
+						<Row className='mb-2'>
+							<Col>Sanidade: {spell.sanity}</Col>
+						</Row>
+					)}
 					<Row className='mb-2'>
-						<Col>Tipo: {spell.type}</Col>
+						<Col>Elemento: {spell.type}</Col>
 					</Row>
 					<Row className='mb-2'>
 						<Col>
@@ -347,6 +373,12 @@ function PlayerSpellField({
 							)}
 						</Col>
 					</Row>
+					{/* Resistência (se preenchido e não for '-') */}
+					{spell.resistance && spell.resistance !== '-' && (
+						<Row className='mb-2'>
+							<Col>Resistência: {spell.resistance}</Col>
+						</Row>
+					)}
 					<Row className='mb-2'>
 						<Col>Alvo: {spell.target}</Col>
 					</Row>

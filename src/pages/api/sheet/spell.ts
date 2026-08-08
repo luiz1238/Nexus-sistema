@@ -31,6 +31,11 @@ async function handlePost(req: NextApiRequest, res: NextApiResponse) {
   const slots: number | undefined = req.body.slots;
   const visible: boolean | undefined = req.body.visible;
 
+  // Novos campos com valor padrão "-" caso venham vazios
+  const sanity: string = req.body.sanity || '-';
+  const resistance: string = req.body.resistance || '-';
+  const symbol: string = req.body.symbol || '-';
+
   if (
     !id ||
     !name ||
@@ -63,6 +68,9 @@ async function handlePost(req: NextApiRequest, res: NextApiResponse) {
       duration,
       slots,
       visible,
+      sanity,
+      resistance,
+      symbol,
     },
   });
 
@@ -89,6 +97,11 @@ async function handlePut(req: NextApiRequest, res: NextApiResponse) {
   const duration: string | undefined = req.body.duration;
   const target: string | undefined = req.body.target;
   const slots: number | undefined = req.body.slots;
+
+  // Novos campos com valor padrão "-" caso venham vazios
+  const sanity: string = req.body.sanity || '-';
+  const resistance: string = req.body.resistance || '-';
+  const symbol: string = req.body.symbol || '-';
 
   if (
     !name ||
@@ -121,6 +134,9 @@ async function handlePut(req: NextApiRequest, res: NextApiResponse) {
       range,
       duration,
       visible: true,
+      sanity,
+      resistance,
+      symbol,
     },
   });
 

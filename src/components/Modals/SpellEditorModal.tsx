@@ -11,6 +11,7 @@ import SheetModal from './SheetModal';
 export type RitualData = Spell & {
   sanity?: string;
   symbol?: string;
+  resistance?: string;
 };
 
 const initialState: RitualData = {
@@ -28,6 +29,7 @@ const initialState: RitualData = {
   visible: true,
   sanity: '',
   symbol: '',
+  resistance: '',
 };
 
 export default function SpellEditorModal(props: EditorModalProps<RitualData>) {
@@ -168,6 +170,16 @@ export default function SpellEditorModal(props: EditorModalProps<RitualData>) {
             className='theme-element'
             value={spell.duration}
             onChange={(ev) => setSpell((sp) => ({ ...sp, duration: ev.target.value }))}
+          />
+        </FormGroup>
+
+        {/* NOVO CAMPO: RESISTÊNCIA */}
+        <FormGroup controlId='createSpellResistance' className='mb-3'>
+          <FormLabel>Resistência</FormLabel>
+          <FormControl
+            className='theme-element'
+            value={spell.resistance || ''}
+            onChange={(ev) => setSpell((sp) => ({ ...sp, resistance: ev.target.value }))}
           />
         </FormGroup>
 

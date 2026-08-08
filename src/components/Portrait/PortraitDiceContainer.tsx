@@ -27,7 +27,6 @@ export default function PortraitDiceContainer(props: {
   const diceResultRef = useRef<HTMLDivElement>(null);
   const diceDescriptionRef = useRef<HTMLDivElement>(null);
 
-  // Fila para gerir rolagens em sequência sem travamentos
   const queue = useRef<DiceResponse[]>([]);
   const isProcessing = useRef(false);
 
@@ -44,11 +43,11 @@ export default function PortraitDiceContainer(props: {
     }
   }, [props.color, diceResult, diceDescription]);
 
-  // Filtro: SÓ exibe atributos, perícias e características (bloqueia dano e customizados)
+  // Filtro: Apenas atributos, perícias e características (ignora dano e customizados)
   function shouldIgnoreRoll(payload: any): boolean {
     const resolverKey = String(payload?.resolverKey || '').toLowerCase();
     const excluded = ['damage', 'dano', 'custom', 'personalizado', 'weapon', 'arma'];
-    return excluded.some(keyword => resolverKey.includes(keyword));
+    return excluded.some((keyword) => resolverKey.includes(keyword));
   }
 
   async function processQueue() {
@@ -59,22 +58,21 @@ export default function PortraitDiceContainer(props: {
       const current = queue.current.shift();
       if (!current) continue;
 
-      // Ativa visibilidade local imediatamente + notifica o componente pai
       setIsRolling(true);
       props.onShowDice();
 
-      // Reproduz o vídeo no OBS com tratamento de segurança
+      // Tenta rodar o vídeo no OBS com fallback caso o motor do OBS bloqueie media
       if (diceVideo.current) {
         try {
           diceVideo.current.currentTime = 0;
           await diceVideo.current.play();
         } catch (err) {
-          console.error("Erro ao reproduzir vídeo no OBS:", err);
+          console.warn("OBS bloqueou o vídeo do dado, exibindo apenas o resultado:", err);
         }
       }
 
-      // Pequeno tempo para sincronizar o aparecimento do número com a animação
-      await sleep(600);
+      // Tempo de espera da animação antes de mostrar o número
+      await sleep(500);
 
       setDiceResult(current.roll);
       if (current.resultType?.description) {
@@ -83,8 +81,8 @@ export default function PortraitDiceContainer(props: {
         setDiceDescription(null);
       }
 
-      // Mantém o resultado visível por 2 segundos
-      await sleep(2000);
+      // Mantém visível por 2.5 segundos
+      await sleep(2500);
 
       // Limpa os estados e oculta
       setDiceResult(null);
@@ -104,8 +102,23 @@ export default function PortraitDiceContainer(props: {
   }
 
   useEffect(() => {
-    const unsub = on('diceResult', (payload) => {
-      if (payload.playerId !== props.playerId) return;
+    // Escuta evento de rolagem (start)
+    const unsub1 = on('diceRoll', (payload) => {
+      if (Number(payload.playerId) !== Number(props.playerId)) return;
+      if (shouldIgnoreRoll(payload)) return;
+
+      setIsRolling(true);
+      props.onShowDice();
+      if (diceVideo.current) {
+        diceVideo.current.currentTime = 0;
+        diceVideo.current.play().catch(() => {});
+      }
+    });
+
+    // Escuta evento de resultado (result)
+    const unsub2 = on('diceResult', (payload) => {
+      // Conversão explícita para Number para evitar erro "1" !== 1
+      if (Number(payload.playerId) !== Number(props.playerId)) return;
       if (shouldIgnoreRoll(payload)) return;
 
       const { results, dices } = payload;
@@ -121,7 +134,8 @@ export default function PortraitDiceContainer(props: {
     });
 
     return () => {
-      unsub?.();
+      unsub1?.();
+      unsub2?.();
     };
   }, [props.playerId]);
 
@@ -141,15 +155,16 @@ export default function PortraitDiceContainer(props: {
       playerId={props.playerId}
     >
       <div className={styles.diceContainerInner}>
+        {/* O src direto na tag <video> resolve o problema de reprodução no OBS CEF */}
         <video
+          src="/dice_animation.webm"
           muted
           playsInline
           preload="auto"
           className={`${isDebugMode ? styles.diceDebug : `popout${isRolling || props.showDice ? ' show' : ''} ${styles.dice}`}`}
           ref={diceVideo}
-        >
-          <source src='/dice_animation.webm' />
-        </video>
+          style={{ display: showContent ? 'block' : 'none' }}
+        />
         {showContent && (
           <div className={styles.diceTextGroup}>
             <div className={styles.result} ref={diceResultRef}>

@@ -532,22 +532,13 @@ export default function PlayerManager(props: PlayerManagerProps) {
 							</Row>
 							<hr />
 							<Row>
-								<Col className='h3'>Magias</Col>
-							</Row>
-							<Row className='mb-2 h6'>
-								<Col>
-									<SpellHeader
-										playerSpell={player.PlayerSpell}
-										maxSlots={player.spellSlots}
-									/>
-								</Col>
+								<Col className='h3'>Rituais</Col>
 							</Row>
 							<Row className='mb-2'>
 								<Col>
 									{player.PlayerSpell.map((spell) => (
 										<Row key={spell.Spell.id} className='mb-2'>
-											<Col
-												title={`${spell.Spell.description} (Slots: ${spell.Spell.slots})`}>
+											<Col title={spell.Spell.description}>
 												{spell.Spell.name}
 											</Col>
 										</Row>
@@ -558,24 +549,6 @@ export default function PlayerManager(props: PlayerManagerProps) {
 					</Row>
 				</Col>
 			))}
-		</>
-	);
-}
-
-function SpellHeader({
-	playerSpell,
-	maxSlots,
-}: {
-	playerSpell: { Spell: { slots: number } }[];
-	maxSlots: number;
-}) {
-	const slots = playerSpell.reduce((prev, cur) => prev + cur.Spell.slots, 0);
-	return (
-		<>
-			Slots Ocupados:{' '}
-			<span style={{ color: slots > maxSlots ? 'red' : '' }}>
-				{slots}/{maxSlots}
-			</span>
 		</>
 	);
 }

@@ -33,6 +33,11 @@ export default function PortraitDiceContainer(props: {
 
   const diceVideo = useRef<HTMLVideoElement>(null);
 
+  // Mantém o ref sincronizado com a prop do pai para evitar travamentos
+  useEffect(() => {
+    showDiceRef.current = props.showDice;
+  }, [props.showDice]);
+
   useEffect(() => {
     if (!props.showDiceRoll) return;
 
@@ -54,7 +59,10 @@ export default function PortraitDiceContainer(props: {
       if (diceVideo.current) {
         props.onShowDice();
         diceVideo.current.currentTime = 0;
-        diceVideo.current.play();
+        // Tratamento da promessa para evitar falhas no OBS
+        diceVideo.current.play().catch((err) => {
+          console.error("Erro ao reproduzir vídeo no OBS:", err);
+        });
       }
     }
 
@@ -119,7 +127,7 @@ export default function PortraitDiceContainer(props: {
     });
 
     return () => { unsub1?.(); unsub2?.(); };
-  }, [props.showDiceRoll]);
+  }, [props.showDiceRoll, props.playerId, props.color]);
 
   const isDebugMode = !!props.debug;
 
@@ -135,26 +143,27 @@ export default function PortraitDiceContainer(props: {
       zIndex={200}
       playerId={props.playerId}
     >
-    <div className={styles.diceContainerInner}>
-      <video
-        muted
-        className={`${isDebugMode ? styles.diceDebug : `popout${props.showDice ? ' show' : ''} ${styles.dice}`}`}
-        ref={diceVideo}
-        preload="auto"
-      >
-        <source src='/dice_animation.webm' />
-      </video>
-      {(isDebugMode || diceResult !== null || diceDescription !== null) && (
-        <div className={styles.diceTextGroup}>
-          <div className={styles.result} ref={diceResultRef}>
-            {isDebugMode ? '42' : (diceResult || lastDiceResult.current || '')}
+      <div className={styles.diceContainerInner}>
+        <video
+          muted
+          playsInline
+          className={`${isDebugMode ? styles.diceDebug : `popout${props.showDice ? ' show' : ''} ${styles.dice}`}`}
+          ref={diceVideo}
+          preload="auto"
+        >
+          <source src='/dice_animation.webm' />
+        </video>
+        {(isDebugMode || diceResult !== null || diceDescription !== null) && (
+          <div className={styles.diceTextGroup}>
+            <div className={styles.result} ref={diceResultRef}>
+              {isDebugMode ? '42' : (diceResult || lastDiceResult.current || '')}
+            </div>
+            <div className={styles.description} ref={diceDescriptionRef}>
+              {isDebugMode ? 'Crítico' : (diceDescription || lastDiceDescription.current || '')}
+            </div>
           </div>
-          <div className={styles.description} ref={diceDescriptionRef}>
-            {isDebugMode ? 'Crítico' : (diceDescription || lastDiceDescription.current || '')}
-          </div>
-        </div>
-      )}
-    </div>
-  </PortraitDraggableResizable>
+        )}
+      </div>
+    </PortraitDraggableResizable>
   );
 }

@@ -5,10 +5,8 @@ import Col from 'react-bootstrap/Col';
 import Row from 'react-bootstrap/Row';
 import Image from 'react-bootstrap/Image';
 import { ErrorLogger } from '../../contexts';
-import useExtendedState from '../../hooks/useExtendedState';
 import useRealtime from '../../hooks/useRealtime';
 import api from '../../utils/api';
-import BottomTextInput from '../BottomTextInput';
 import CustomSpinner from '../CustomSpinner';
 import DataContainer from '../DataContainer';
 import AddDataModal from '../Modals/AddDataModal';
@@ -38,9 +36,6 @@ export default function PlayerSpellContainer(props: PlayerSpellContainerProps) {
 		props.availableSpells
 	);
 	const [playerSpells, setPlayerSpells] = useState<SpellType[]>(props.playerSpells);
-	const [maxSlots, setMaxSlots, isClean] = useExtendedState(
-		props.playerMaxSlots.toString()
-	);
 	const [loading, setLoading] = useState(false);
 
 	// Estados do Modal de Edição/Criação
@@ -176,19 +171,6 @@ export default function PlayerSpellContainer(props: PlayerSpellContainerProps) {
 		setAvailableSpells([...availableSpells, modalSpell]);
 	}
 
-	function onMaxSlotsBlur() {
-		if (isClean()) return;
-		let maxSlotsFloat = parseFloat(maxSlots);
-		if (isNaN(maxSlotsFloat)) {
-			maxSlotsFloat = 0;
-			setMaxSlots(maxSlotsFloat.toString());
-		} else setMaxSlots(maxSlots);
-		api.post('/sheet/player', { maxSlots: maxSlotsFloat, npcId: props.npcId }).catch(logError);
-	}
-
-	const slots = playerSpells.reduce((prev, cur) => prev + cur.slots, 0);
-	const colorStyle = { color: slots > parseFloat(maxSlots) ? 'red' : 'inherit' };
-
 	return (
 		<>
 			<DataContainer
@@ -213,20 +195,6 @@ export default function PlayerSpellContainer(props: PlayerSpellContainerProps) {
 					</Col>
 				</Row>
 
-				<Row className='mb-2'>
-					<Col className='text-center h5'>
-						<span className='me-2'>Espaços: </span>
-						<span style={colorStyle}> {slots} /</span>
-						<BottomTextInput
-							value={maxSlots}
-							onChange={(ev) => setMaxSlots(ev.currentTarget.value)}
-							onBlur={onMaxSlotsBlur}
-							className='text-center'
-							style={{ ...colorStyle, maxWidth: '3rem' }}
-							disabled={loading}
-						/>
-					</Col>
-				</Row>
 				<Row>
 					{playerSpells.map((spell) => (
 						<PlayerSpellField
@@ -390,9 +358,6 @@ function PlayerSpellField({
 					</Row>
 					<Row className='mb-2'>
 						<Col>Duração: {spell.duration}</Col>
-					</Row>
-					<Row className='mb-2'>
-						<Col>Espaços Utilizados: {spell.slots}</Col>
 					</Row>
 				</Col>
 			</Row>

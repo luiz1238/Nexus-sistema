@@ -38,7 +38,14 @@ export default function SpellEditorContainer(props: SpellEditorContainerProps) {
 
     setLoading(true);
 
-    const dataToSend = { ...sp, type: sp.type || '-' };
+    // Garante que todos os campos opcionais/novos tenham "-" como fallback ao enviar para a API
+    const dataToSend = {
+      ...sp,
+      type: sp.type || '-',
+      sanity: sp.sanity || '-',
+      resistance: sp.resistance || '-',
+      symbol: sp.symbol || '-',
+    };
 
     const config: AxiosRequestConfig =
       spellModal.operation === 'create'

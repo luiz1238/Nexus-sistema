@@ -53,8 +53,16 @@ export default function PortraitDiceContainer(props: {
       showDiceRef.current = true;
       if (diceVideo.current) {
         props.onShowDice();
-        diceVideo.current.currentTime = 0;
-        diceVideo.current.play();
+        
+        // 🚨 DEFESA 1: Evita que o erro de tempo/play trave o React!
+        try { diceVideo.current.currentTime = 0; } catch(e){}
+        
+        const playPromise = diceVideo.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.warn("Navegador bloqueou a animação na primeira rolagem:", error);
+          });
+        }
       }
     }
 
@@ -138,9 +146,16 @@ export default function PortraitDiceContainer(props: {
     <div className={styles.diceContainerInner}>
       <video
         muted
+        playsInline // <-- Importante para o OBS!
         className={`${isDebugMode ? styles.diceDebug : `popout${props.showDice ? ' show' : ''} ${styles.dice}`}`}
         ref={diceVideo}
         preload="auto"
+        // 🚨 DEFESA 2: Mantém o vídeo na memória (display: block) mas transparente (opacity) para não ser descarregado
+        style={{ 
+            display: 'block', 
+            opacity: props.showDice ? 1 : 0, 
+            visibility: props.showDice ? 'visible' : 'hidden' 
+        }}
       >
         <source src='/dice_animation.webm' />
       </video>
@@ -149,7 +164,7 @@ export default function PortraitDiceContainer(props: {
           <div 
             className={styles.result} 
             ref={diceResultRef} 
-            style={{ fontSize: '6.5rem', fontWeight: 'bold' }}
+            style={{ fontSize: '8.5rem', fontWeight: 'bold' }} // Sua fonte aumentada
           >
             {isDebugMode ? '42' : (diceResult || lastDiceResult.current || '')}
           </div>

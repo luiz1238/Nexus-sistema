@@ -78,6 +78,9 @@ export default function PortraitDiceContainer(props: {
         lastDiceDescription.current = result.resultType.description;
         await sleep(750);
         setDiceDescription(result.resultType.description);
+      } else {
+        lastDiceDescription.current = '';
+        setDiceDescription(null);
       }
       await sleep(1500);
 
@@ -159,6 +162,6 @@ export default function PortraitDiceContainer(props: {
         </div>
       )}
     </div>
-  </PortraitDraggableResizable>
+    </PortraitDraggableResizable>
   );
 }

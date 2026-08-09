@@ -21,7 +21,9 @@ export default function PortraitDiceContainer(props: {
   
   const [diceResult, setDiceResult] = useState<number | null>(null);
   const [diceDescription, setDiceDescription] = useState<string | null>(null);
-  const [isRolling, setIsRolling] = useState(false);
+  
+  // Substituímos isRolling por "fases" para podermos animar a saída!
+  const [phase, setPhase] = useState<'idle' | 'rolling' | 'exiting'>('idle');
 
   const diceVideo = useRef<HTMLVideoElement>(null);
   const diceResultRef = useRef<HTMLDivElement>(null);
@@ -59,28 +61,19 @@ export default function PortraitDiceContainer(props: {
       const current = queue.current.shift();
       if (!current) continue;
 
-      setIsRolling(true);
+      setPhase('rolling');
       props.onShowDice();
 
-      // Inicia a animação imediatamente, sem o `await` que causava o congelamento no OBS!
       if (diceVideo.current) {
-        try {
-          diceVideo.current.currentTime = 0;
-          const playPromise = diceVideo.current.play();
-          if (playPromise !== undefined) {
-            playPromise.catch((err) => {
-              console.warn("OBS bloqueou autoplay:", err);
-            });
-          }
-        } catch (err) {
-          console.warn("Erro ao reproduzir:", err);
-        }
+        // 🚨 O SEGREDO DEFINITIVO: Separar o currentTime do play() em try..catch isolados!
+        // Assim, se o OBS travar ao zerar o tempo, NÃO impede o vídeo de iniciar o play.
+        try { diceVideo.current.currentTime = 0; } catch (err) { /* Ignora se estiver dormindo */ }
+        try { diceVideo.current.play().catch(() => {}); } catch (err) { console.warn("Erro no play:", err); }
       }
 
-      // Aguarda 500ms (Momento exato da colisão do dado na animação)
-      await sleep(500);
+      // Aguarda 450ms: momento exato do impacto do dado na tela
+      await sleep(450);
 
-      // Exibe o número e a descrição
       setDiceResult(current.roll);
       if (current.resultType?.description) {
         setDiceDescription(current.resultType.description);
@@ -88,17 +81,23 @@ export default function PortraitDiceContainer(props: {
         setDiceDescription(null);
       }
 
-      // Mantém o resultado visível por 3 segundos
+      // Mantém o resultado visível na tela por 3 segundos
       await sleep(3000);
 
-      // Limpa os estados e oculta o container
+      // 🌪️ INICIA A ANIMAÇÃO DE SAÍDA GIRATÓRIA
+      setPhase('exiting');
+      
+      // Aguarda o tempo exato da animação CSS encolher e sumir (500ms)
+      await sleep(500);
+
+      // Limpa os estados e esconde totalmente
       setDiceResult(null);
       setDiceDescription(null);
-      setIsRolling(false);
+      setPhase('idle');
       props.onHideDice();
 
-      // Aguarda a transição de saída antes de puxar a próxima rolagem
-      await sleep(400);
+      // Um pequeno respiro antes do próximo dado na fila
+      await sleep(200);
     }
 
     isProcessing.current = false;
@@ -132,7 +131,8 @@ export default function PortraitDiceContainer(props: {
   }, [props.playerId]);
 
   const isDebugMode = !!props.debug;
-  const showContent = isDebugMode || isRolling || diceResult !== null;
+  const isVisible = isDebugMode || phase === 'rolling' || phase === 'exiting';
+  const isExiting = phase === 'exiting';
 
   return (
     <PortraitDraggableResizable
@@ -147,36 +147,45 @@ export default function PortraitDiceContainer(props: {
       playerId={props.playerId}
     >
       <div className={styles.diceContainerInner}>
-        <video
-          src="/dice_animation.webm"
-          muted
-          playsInline
-          preload="auto"
-          className={`${isDebugMode ? styles.diceDebug : `popout${showContent || props.showDice ? ' show' : ''} ${styles.dice}`}`}
-          ref={diceVideo}
-          style={{ 
-            display: 'block', // Impede que o vídeo hiberne e pule os frames do começo!
-            opacity: showContent || props.showDice ? 1 : 0, 
-            visibility: showContent || props.showDice ? 'visible' : 'hidden',
-            pointerEvents: 'none'
+        {/* Div responsável pela animação de sumir (encolhe e gira) */}
+        <div
+          style={{
+            width: '100%',
+            height: '100%',
+            opacity: isVisible && !isExiting ? 1 : 0,
+            transform: isExiting ? 'scale(0) rotate(270deg)' : 'scale(1) rotate(0deg)',
+            transition: isExiting
+              ? 'transform 0.5s cubic-bezier(0.55, 0.085, 0.68, 0.53), opacity 0.4s ease-in'
+              : 'none',
+            transformOrigin: 'center center',
           }}
-        />
-        {showContent && (
-          <div className={styles.diceTextGroup}>
-            <div 
-              className={styles.result} 
-              ref={diceResultRef}
-              style={{ fontSize: '8.5rem', fontWeight: 'bold' }}
-            >
-              {isDebugMode ? '42' : (diceResult ?? '')}
-            </div>
-            {diceDescription && (
-              <div className={styles.description} ref={diceDescriptionRef}>
-                {isDebugMode ? 'Crítico' : diceDescription}
+        >
+          <video
+            src="/dice_animation.webm"
+            muted
+            playsInline
+            preload="auto"
+            className={`${isDebugMode ? styles.diceDebug : `popout${isVisible || props.showDice ? ' show' : ''} ${styles.dice}`}`}
+            ref={diceVideo}
+            style={{ display: 'block', pointerEvents: 'none' }}
+          />
+          {isVisible && (
+            <div className={styles.diceTextGroup}>
+              <div 
+                className={styles.result} 
+                ref={diceResultRef}
+                style={{ fontSize: '8.5rem', fontWeight: 'bold' }} // O número se mantém bem grande!
+              >
+                {isDebugMode ? '42' : (diceResult ?? '')}
               </div>
-            )}
-          </div>
-        )}
+              {diceDescription && (
+                <div className={styles.description} ref={diceDescriptionRef}>
+                  {isDebugMode ? 'Crítico' : diceDescription}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </PortraitDraggableResizable>
   );

@@ -24,64 +24,64 @@ export type DiceRollModalProps = DiceRoll & {
   _key?: number;
 };
 
+type DiceRollResult = Omit<DiceRoll, 'dices'> & {
+  dices: DiceRequest | DiceRequest[] | null;
+};
+
 export default function DiceRollModal(props: DiceRollModalProps) {
-  const [dices, setDices] = useState(props.dices);
+  const [dices, setDices] = useState<(Omit<DiceRequest, 'num'> & { num?: number }) | null>(null);
+  const [resultDice, setResultDice] = useState<DiceRollResult | null>(null);
   const [num, setNum] = useState(1);
-  const diceRef = useRef<DiceRollResult | null>(null);
 
   useEffect(() => {
     if (props.dices === null) {
-      diceRef.current = null;
       setDices(null);
+      setResultDice(null);
       return;
     }
-    if (Array.isArray(props.dices))
-      return roll({
+
+    if (Array.isArray(props.dices)) {
+      setDices(null);
+      setResultDice({
         dices: props.dices,
         onResult: props.onResult,
         resolverKey: props.resolverKey,
       });
-    else if (props.dices.num) {
+    } else if (props.dices.num) {
       const dices = {
         ...props.dices,
         num: props.dices.num,
       };
-      return roll({
+      setDices(null);
+      setResultDice({
         dices,
         onResult: props.onResult,
         resolverKey: props.resolverKey,
       });
+    } else {
+      setDices(props.dices);
+      setResultDice(null);
     }
-    setDices(props.dices);
-  }, [props.dices]);
+  }, [props.dices, props._key]);
 
   function onNumChange(coeff: number) {
-    setNum((n) => {
-      return clamp(n + coeff, 1, 9);
-    });
+    setNum((n) => clamp(n + coeff, 1, 9));
   }
 
   function onExited() {
     setNum(1);
   }
 
-  function roll(dice?: DiceRollResult) {
-    if (dice) {
-      diceRef.current = dice;
-      return;
-    }
+  function roll() {
     if (dices === null || Array.isArray(dices)) return;
 
-    const roll = {
+    setResultDice({
       dices: { ...dices, num },
       onResult: props.onResult,
       resolverKey: props.resolverKey,
-    };
-    diceRef.current = roll;
+    });
     setDices(null);
   }
-
-  const showResult = props.dices !== null && !dices;
 
   return (
     <>
@@ -95,7 +95,7 @@ export default function DiceRollModal(props: DiceRollModalProps) {
         onExited={onExited}
         applyButton={{
           name: 'Rolar',
-          onApply: () => roll(),
+          onApply: roll,
         }}
         centered>
         <Container fluid className='text-center'>
@@ -123,21 +123,19 @@ export default function DiceRollModal(props: DiceRollModalProps) {
         </Container>
       </SheetModal>
       <DiceRollResultModal
-        dices={showResult ? diceRef.current?.dices ?? null : null}
-        onResult={diceRef.current?.onResult}
-        resolverKey={diceRef.current?.resolverKey}
+        dices={resultDice?.dices ?? null}
+        onResult={resultDice?.onResult}
+        resolverKey={resultDice?.resolverKey}
         npcId={props.npcId}
         _key={props._key}
-        onHide={() => {}}
-        onCloseModal={() => props.onHide()}
+        onHide={() => {
+          setResultDice(null);
+          props.onHide();
+        }}
       />
     </>
   );
 }
-
-type DiceRollResult = Omit<DiceRoll, 'dices'> & {
-  dices: DiceRequest | DiceRequest[] | null;
-};
 
 type DiceRollResultModalProps = Omit<
   DiceRollModalProps,

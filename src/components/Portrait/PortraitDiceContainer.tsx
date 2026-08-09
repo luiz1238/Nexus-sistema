@@ -153,7 +153,7 @@ export default function PortraitDiceContainer(props: {
             <div 
               className={styles.result} 
               ref={diceResultRef}
-              style={{ fontSize: '6.5rem', fontWeight: 'bold' }} // Tamanho do número aumentado aqui
+              style={{ fontSize: '8.5rem', fontWeight: 'bold' }} // Tamanho do número aumentado aqui
             >
               {isDebugMode ? '42' : (diceResult ?? '')}
             </div>

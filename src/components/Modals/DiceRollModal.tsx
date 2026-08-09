@@ -30,7 +30,11 @@ export default function DiceRollModal(props: DiceRollModalProps) {
   const diceRef = useRef<DiceRollResult | null>(null);
 
   useEffect(() => {
-    if (props.dices === null) return;
+    if (props.dices === null) {
+      diceRef.current = null;
+      setDices(null);
+      return;
+    }
     if (Array.isArray(props.dices))
       return roll({
         dices: props.dices,
@@ -59,9 +63,6 @@ export default function DiceRollModal(props: DiceRollModalProps) {
 
   function onExited() {
     setNum(1);
-    if (diceRef.current) {
-      diceRef.current = null;
-    }
   }
 
   function roll(dice?: DiceRollResult) {
@@ -87,7 +88,10 @@ export default function DiceRollModal(props: DiceRollModalProps) {
       <SheetModal
         title='Rolagem de Dados'
         show={dices !== null}
-        onHide={() => setDices(null)}
+        onHide={() => {
+          setDices(null);
+          props.onHide();
+        }}
         onExited={onExited}
         applyButton={{
           name: 'Rolar',

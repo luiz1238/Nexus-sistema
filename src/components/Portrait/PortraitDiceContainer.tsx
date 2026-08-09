@@ -146,7 +146,11 @@ export default function PortraitDiceContainer(props: {
       </video>
       {(isDebugMode || diceResult !== null || diceDescription !== null) && (
         <div className={styles.diceTextGroup}>
-          <div className={styles.result} ref={diceResultRef}>
+          <div 
+            className={styles.result} 
+            ref={diceResultRef} 
+            style={{ fontSize: '6.5rem', fontWeight: 'bold' }}
+          >
             {isDebugMode ? '42' : (diceResult || lastDiceResult.current || '')}
           </div>
           <div className={styles.description} ref={diceDescriptionRef}>

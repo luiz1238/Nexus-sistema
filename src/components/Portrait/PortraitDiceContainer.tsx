@@ -43,7 +43,7 @@ export default function PortraitDiceContainer(props: {
     }
   }, [props.color, diceResult, diceDescription]);
 
-  // Filtro: Exibe APENAS atributos, perícias e características (ignora dano e customizados)
+  // Filtro: Exibe APENAS atributos, perícias e características
   function shouldIgnoreRoll(payload: any): boolean {
     const resolverKey = String(payload?.resolverKey || '').toLowerCase();
     const title = String(payload?.title || payload?.description || '').toLowerCase();
@@ -62,18 +62,25 @@ export default function PortraitDiceContainer(props: {
       setIsRolling(true);
       props.onShowDice();
 
+      // Inicia a animação imediatamente, sem o `await` que causava o congelamento no OBS!
       if (diceVideo.current) {
         try {
           diceVideo.current.currentTime = 0;
-          await diceVideo.current.play();
+          const playPromise = diceVideo.current.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((err) => {
+              console.warn("OBS bloqueou autoplay:", err);
+            });
+          }
         } catch (err) {
-          console.warn("OBS bloqueou o vídeo do dado, exibindo apenas o resultado:", err);
+          console.warn("Erro ao reproduzir:", err);
         }
       }
 
-      // Aguarda 450ms: momento exato do impacto da animação
-      await sleep(450);
+      // Aguarda 500ms (Momento exato da colisão do dado na animação)
+      await sleep(500);
 
+      // Exibe o número e a descrição
       setDiceResult(current.roll);
       if (current.resultType?.description) {
         setDiceDescription(current.resultType.description);
@@ -84,13 +91,14 @@ export default function PortraitDiceContainer(props: {
       // Mantém o resultado visível por 3 segundos
       await sleep(3000);
 
-      // Limpa os estados e oculta
+      // Limpa os estados e oculta o container
       setDiceResult(null);
       setDiceDescription(null);
       setIsRolling(false);
       props.onHideDice();
 
-      await sleep(300);
+      // Aguarda a transição de saída antes de puxar a próxima rolagem
+      await sleep(400);
     }
 
     isProcessing.current = false;
@@ -144,16 +152,21 @@ export default function PortraitDiceContainer(props: {
           muted
           playsInline
           preload="auto"
-          className={`${isDebugMode ? styles.diceDebug : `popout${isRolling || props.showDice ? ' show' : ''} ${styles.dice}`}`}
+          className={`${isDebugMode ? styles.diceDebug : `popout${showContent || props.showDice ? ' show' : ''} ${styles.dice}`}`}
           ref={diceVideo}
-          style={{ display: showContent ? 'block' : 'none' }}
+          style={{ 
+            display: 'block', // Impede que o vídeo hiberne e pule os frames do começo!
+            opacity: showContent || props.showDice ? 1 : 0, 
+            visibility: showContent || props.showDice ? 'visible' : 'hidden',
+            pointerEvents: 'none'
+          }}
         />
         {showContent && (
           <div className={styles.diceTextGroup}>
             <div 
               className={styles.result} 
               ref={diceResultRef}
-              style={{ fontSize: '8.5rem', fontWeight: 'bold' }} // Tamanho do número aumentado aqui
+              style={{ fontSize: '8.5rem', fontWeight: 'bold' }}
             >
               {isDebugMode ? '42' : (diceResult ?? '')}
             </div>

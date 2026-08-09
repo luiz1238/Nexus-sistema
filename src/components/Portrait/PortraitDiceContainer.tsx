@@ -71,12 +71,15 @@ export default function PortraitDiceContainer(props: {
 
       diceData.current = result;
 
+      // Limpa a descrição da rolagem anterior imediatamente antes de atualizar o número
       lastDiceResult.current = result.roll;
+      lastDiceDescription.current = '';
       setDiceResult(result.roll);
+      setDiceDescription(null);
 
       if (result.resultType) {
-        lastDiceDescription.current = result.resultType.description;
         await sleep(750);
+        lastDiceDescription.current = result.resultType.description;
         setDiceDescription(result.resultType.description);
       } else {
         lastDiceDescription.current = '';

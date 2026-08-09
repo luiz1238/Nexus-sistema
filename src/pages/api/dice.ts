@@ -138,7 +138,7 @@ function resolveSuccessType(
     case '20':
       if (roll > 20 - reference)
         return {
-          description: 'Sucesso',
+          description: 'Normal',
           successWeight: 0,
         };
       return {
@@ -158,7 +158,7 @@ function resolveSuccessType(
         };
       if (roll > 20 - reference)
         return {
-          description: 'Sucesso',
+          description: 'Normal',
           successWeight: 0,
         };
       return {
@@ -168,7 +168,7 @@ function resolveSuccessType(
     case '100':
       if (roll <= reference)
         return {
-          description: 'Sucesso',
+          description: 'Normal',
           successWeight: 0,
         };
       return {
@@ -188,7 +188,7 @@ function resolveSuccessType(
         };
       if (roll <= reference)
         return {
-          description: 'Sucesso',
+          description: 'Normal',
           successWeight: 0,
         };
       return {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import Fade from 'react-bootstrap/Fade';
 import useRealtime from '../../hooks/useRealtime';
 import styles from '../../styles/modules/Portrait.module.scss';
 import { sleep } from '../../utils';
@@ -17,122 +18,110 @@ export default function PortraitDiceContainer(props: {
   debug?: boolean;
   layout?: LayoutData | null;
 }) {
+  const diceQueue = useRef<DiceResponse[]>([]);
+  const diceData = useRef<DiceResponse>();
+
+  const showDiceRef = useRef(props.showDice);
   const { on } = useRealtime();
-  
+
   const [diceResult, setDiceResult] = useState<number | null>(null);
+  const diceResultRef = useRef<HTMLDivElement>(null);
+  const lastDiceResult = useRef(0);
   const [diceDescription, setDiceDescription] = useState<string | null>(null);
-  
-  // Substituímos isRolling por "fases" para podermos animar a saída!
-  const [phase, setPhase] = useState<'idle' | 'rolling' | 'exiting'>('idle');
+  const diceDescriptionRef = useRef<HTMLDivElement>(null);
+  const lastDiceDescription = useRef('');
 
   const diceVideo = useRef<HTMLVideoElement>(null);
-  const diceResultRef = useRef<HTMLDivElement>(null);
-  const diceDescriptionRef = useRef<HTMLDivElement>(null);
 
-  const queue = useRef<DiceResponse[]>([]);
-  const isProcessing = useRef(false);
-
-  // Aplica as cores personalizadas do atributo
   useEffect(() => {
+    if (!props.showDiceRoll) return;
+
     const style = getAttributeStyle(props.color);
+
     if (diceResultRef.current) {
       diceResultRef.current.style.color = style.color;
       diceResultRef.current.style.textShadow = style.textShadow;
     }
+
     if (diceDescriptionRef.current) {
       diceDescriptionRef.current.style.color = style.color;
       diceDescriptionRef.current.style.textShadow = style.textShadow;
     }
-  }, [props.color, diceResult, diceDescription]);
 
-  // Filtro: Exibe APENAS atributos, perícias e características
-  function shouldIgnoreRoll(payload: any): boolean {
-    const resolverKey = String(payload?.resolverKey || '').toLowerCase();
-    const title = String(payload?.title || payload?.description || '').toLowerCase();
-    const excluded = ['damage', 'dano', 'custom', 'personalizado', 'weapon', 'arma'];
-    return excluded.some((keyword) => resolverKey.includes(keyword) || title.includes(keyword));
-  }
-
-  async function processQueue() {
-    if (isProcessing.current) return;
-    isProcessing.current = true;
-
-    while (queue.current.length > 0) {
-      const current = queue.current.shift();
-      if (!current) continue;
-
-      setPhase('rolling');
-      props.onShowDice();
-
+    function showDiceRoll() {
+      if (showDiceRef.current) return;
+      showDiceRef.current = true;
       if (diceVideo.current) {
-        // 🚨 O SEGREDO DEFINITIVO: Separar o currentTime do play() em try..catch isolados!
-        // Assim, se o OBS travar ao zerar o tempo, NÃO impede o vídeo de iniciar o play.
-        try { diceVideo.current.currentTime = 0; } catch (err) { /* Ignora se estiver dormindo */ }
-        try { diceVideo.current.play().catch(() => {}); } catch (err) { console.warn("Erro no play:", err); }
+        props.onShowDice();
+        diceVideo.current.currentTime = 0;
+        diceVideo.current.play();
       }
-
-      // Aguarda 450ms: momento exato do impacto do dado na tela
-      await sleep(450);
-
-      setDiceResult(current.roll);
-      if (current.resultType?.description) {
-        setDiceDescription(current.resultType.description);
-      } else {
-        setDiceDescription(null);
-      }
-
-      // Mantém o resultado visível na tela por 3 segundos
-      await sleep(3000);
-
-      // 🌪️ INICIA A ANIMAÇÃO DE SAÍDA GIRATÓRIA
-      setPhase('exiting');
-      
-      // Aguarda o tempo exato da animação CSS encolher e sumir (500ms)
-      await sleep(500);
-
-      // Limpa os estados e esconde totalmente
-      setDiceResult(null);
-      setDiceDescription(null);
-      setPhase('idle');
-      props.onHideDice();
-
-      // Um pequeno respiro antes do próximo dado na fila
-      await sleep(200);
     }
 
-    isProcessing.current = false;
-  }
+    async function showNextResult(result: DiceResponse) {
+      showDiceRoll();
+      await sleep(750);
+      diceData.current = undefined;
+      onDiceResult(result);
+    }
 
-  function handleNewRoll(result: DiceResponse) {
-    queue.current.push(result);
-    processQueue();
-  }
+    async function onDiceResult(result: DiceResponse) {
+      if (diceData.current) return diceQueue.current.push(result);
+      if (!showDiceRef.current) return showNextResult(result);
 
-  useEffect(() => {
-    const unsub = on('diceResult', (payload) => {
-      if (Number(payload.playerId) !== Number(props.playerId)) return;
-      if (shouldIgnoreRoll(payload)) return;
+      diceData.current = result;
 
+      lastDiceResult.current = result.roll;
+      setDiceResult(result.roll);
+
+      if (result.resultType) {
+        lastDiceDescription.current = result.resultType.description;
+        await sleep(750);
+        setDiceDescription(result.resultType.description);
+      }
+      await sleep(1500);
+
+      setDiceResult(null);
+      setDiceDescription(null);
+
+      await sleep(250);
+      props.onHideDice();
+      await sleep(600);
+      showDiceRef.current = false;
+
+      const next = diceQueue.current.shift();
+      if (next) showNextResult(next);
+      else diceData.current = undefined;
+    }
+
+    const unsub1 = on('diceRoll', (payload) => {
+      if (payload.playerId !== props.playerId) return;
+      showDiceRoll();
+    });
+
+    const unsub2 = on('diceResult', (payload) => {
+      if (payload.playerId !== props.playerId) return;
       const { results, dices } = payload;
 
-      if (results && results.length === 1) {
-        handleNewRoll(results[0]);
-      } else if (Array.isArray(dices) && results) {
-        const sum = results.reduce((prev, cur) => prev + cur.roll, 0);
-        handleNewRoll({ roll: sum });
-      } else if (results && results.length > 0) {
-        results.forEach((r) => handleNewRoll(r));
+      if (results.length === 1) return onDiceResult(results[0]);
+
+      if (Array.isArray(dices)) {
+        onDiceResult({
+          roll: results.reduce((prev, cur) => prev + cur.roll, 0),
+        });
+      } else {
+        if (diceData.current) return diceQueue.current.push(...results);
+        const first = results.shift();
+        if (!first) return;
+        diceQueue.current.push(...results);
+        onDiceResult(first);
       }
     });
 
-    return () => {
-      unsub?.();
-    };
-  }, [props.playerId]);
+    return () => { unsub1?.(); unsub2?.(); };
+  }, [props.showDiceRoll]);
 
   const isDebugMode = !!props.debug;
-  const isVisible = isDebugMode || phase === 'rolling' || phase === 'exiting';
-  const isExiting = phase === 'exiting';
 
   return (
     <PortraitDraggableResizable
@@ -146,47 +135,26 @@ export default function PortraitDiceContainer(props: {
       zIndex={200}
       playerId={props.playerId}
     >
-      <div className={styles.diceContainerInner}>
-        {/* Div responsável pela animação de sumir (encolhe e gira) */}
-        <div
-          style={{
-            width: '100%',
-            height: '100%',
-            opacity: isVisible && !isExiting ? 1 : 0,
-            transform: isExiting ? 'scale(0) rotate(270deg)' : 'scale(1) rotate(0deg)',
-            transition: isExiting
-              ? 'transform 0.5s cubic-bezier(0.55, 0.085, 0.68, 0.53), opacity 0.4s ease-in'
-              : 'none',
-            transformOrigin: 'center center',
-          }}
-        >
-          <video
-            src="/dice_animation.webm"
-            muted
-            playsInline
-            preload="auto"
-            className={`${isDebugMode ? styles.diceDebug : `popout${isVisible || props.showDice ? ' show' : ''} ${styles.dice}`}`}
-            ref={diceVideo}
-            style={{ display: 'block', pointerEvents: 'none' }}
-          />
-          {isVisible && (
-            <div className={styles.diceTextGroup}>
-              <div 
-                className={styles.result} 
-                ref={diceResultRef}
-                style={{ fontSize: '8.5rem', fontWeight: 'bold' }} // O número se mantém bem grande!
-              >
-                {isDebugMode ? '42' : (diceResult ?? '')}
-              </div>
-              {diceDescription && (
-                <div className={styles.description} ref={diceDescriptionRef}>
-                  {isDebugMode ? 'Crítico' : diceDescription}
-                </div>
-              )}
-            </div>
-          )}
+    <div className={styles.diceContainerInner}>
+      <video
+        muted
+        className={`${isDebugMode ? styles.diceDebug : `popout${props.showDice ? ' show' : ''} ${styles.dice}`}`}
+        ref={diceVideo}
+        preload="auto"
+      >
+        <source src='/dice_animation.webm' />
+      </video>
+      {(isDebugMode || diceResult !== null || diceDescription !== null) && (
+        <div className={styles.diceTextGroup}>
+          <div className={styles.result} ref={diceResultRef}>
+            {isDebugMode ? '42' : (diceResult || lastDiceResult.current || '')}
+          </div>
+          <div className={styles.description} ref={diceDescriptionRef}>
+            {isDebugMode ? 'Crítico' : (diceDescription || lastDiceDescription.current || '')}
+          </div>
         </div>
-      </div>
-    </PortraitDraggableResizable>
+      )}
+    </div>
+  </PortraitDraggableResizable>
   );
 }

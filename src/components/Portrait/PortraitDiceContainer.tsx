@@ -25,17 +25,30 @@ export default function PortraitDiceContainer(props: {
   const { on } = useRealtime();
 
   const [diceResult, setDiceResult] = useState<number | null>(null);
+  const diceResultRef = useRef<HTMLDivElement>(null);
   const lastDiceResult = useRef(0);
+  
   const [diceDescription, setDiceDescription] = useState<string | null>(null);
+  const diceDescriptionRef = useRef<HTMLDivElement>(null);
   const lastDiceDescription = useRef('');
 
   const diceVideo = useRef<HTMLVideoElement>(null);
 
-  // Aplica o estilo das cores diretamente, prevenindo que o texto fique invisível
-  const attributeStyle = getAttributeStyle(props.color);
-
   useEffect(() => {
     if (!props.showDiceRoll) return;
+
+    // Resgatado do código original: Aplicar as cores diretamente via ref (Muito mais leve pro OBS)
+    const style = getAttributeStyle(props.color);
+
+    if (diceResultRef.current) {
+      diceResultRef.current.style.color = style.color;
+      diceResultRef.current.style.textShadow = style.textShadow;
+    }
+
+    if (diceDescriptionRef.current) {
+      diceDescriptionRef.current.style.color = style.color;
+      diceDescriptionRef.current.style.textShadow = style.textShadow;
+    }
 
     function showDiceRoll() {
       if (showDiceRef.current) return;
@@ -43,7 +56,8 @@ export default function PortraitDiceContainer(props: {
       if (diceVideo.current) {
         props.onShowDice();
         diceVideo.current.currentTime = 0;
-        diceVideo.current.play().catch(console.error);
+        // O .catch é uma proteção extra caso o vídeo falhe por tab suspensa
+        diceVideo.current.play().catch(() => {});
       }
     }
 
@@ -60,34 +74,32 @@ export default function PortraitDiceContainer(props: {
 
       diceData.current = result;
 
-      try {
-        lastDiceResult.current = result.roll;
-        lastDiceDescription.current = '';
-        setDiceResult(result.roll);
-        setDiceDescription(null);
+      // Reseta a descrição IMEDIATAMENTE (corrige a falha do dado de dano e o texto piscando)
+      lastDiceResult.current = result.roll;
+      lastDiceDescription.current = result.resultType ? result.resultType.description : '';
+      
+      setDiceResult(result.roll);
 
-        if (result.resultType) {
-          await sleep(750);
-          lastDiceDescription.current = result.resultType.description;
-          setDiceDescription(result.resultType.description);
-        } else {
-          lastDiceDescription.current = '';
-          setDiceDescription(null);
-        }
-        await sleep(1500);
-      } finally {
-        setDiceResult(null);
-        setDiceDescription(null);
-
-        await sleep(250);
-        props.onHideDice();
-        await sleep(600);
-        showDiceRef.current = false;
-
-        const next = diceQueue.current.shift();
-        if (next) showNextResult(next);
-        else diceData.current = undefined;
+      if (result.resultType) {
+        await sleep(750);
+        setDiceDescription(result.resultType.description);
+      } else {
+        await sleep(750);
       }
+      
+      await sleep(1500);
+
+      setDiceResult(null);
+      setDiceDescription(null);
+
+      await sleep(250);
+      props.onHideDice();
+      await sleep(600);
+      showDiceRef.current = false;
+
+      const next = diceQueue.current.shift();
+      if (next) showNextResult(next);
+      else diceData.current = undefined;
     }
 
     const unsub1 = on('diceRoll', (payload) => {
@@ -141,31 +153,17 @@ export default function PortraitDiceContainer(props: {
           <source src='/dice_animation.webm' />
         </video>
         
-        {/* Recriado a estrutura original usando os componentes Fade */}
+        {/* Retornado para os componentes de Fade que o OBS já aceitava bem sem travar */}
         <div className={styles.diceTextGroup}>
           <Fade in={isDebugMode || diceResult !== null}>
-            <div 
-              className={styles.result} 
-              style={{ 
-                fontSize: '9.5rem', 
-                fontWeight: 'bold', 
-                color: attributeStyle.color, 
-                textShadow: attributeStyle.textShadow 
-              }}
-            >
-              {isDebugMode ? '42' : (diceResult !== null ? diceResult : lastDiceResult.current)}
+            <div className={styles.result} ref={diceResultRef} style={{ fontSize: '9.5rem', fontWeight: 'bold' }}>
+              {isDebugMode ? '42' : (diceResult || lastDiceResult.current || '')}
             </div>
           </Fade>
           
           <Fade in={isDebugMode || diceDescription !== null}>
-            <div 
-              className={styles.description}
-              style={{ 
-                color: attributeStyle.color, 
-                textShadow: attributeStyle.textShadow 
-              }}
-            >
-              {isDebugMode ? 'Crítico' : (diceDescription !== null ? diceDescription : lastDiceDescription.current)}
+            <div className={styles.description} ref={diceDescriptionRef}>
+              {isDebugMode ? 'Crítico' : (diceDescription || lastDiceDescription.current || '')}
             </div>
           </Fade>
         </div>

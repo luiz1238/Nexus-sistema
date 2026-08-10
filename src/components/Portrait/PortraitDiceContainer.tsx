@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Fade from 'react-bootstrap/Fade';
-import type { SocketIO } from '../../hooks/useSocket';
+import useRealtime from '../../hooks/useRealtime';
 import styles from '../../styles/modules/Portrait.module.scss';
 import { sleep } from '../../utils';
 import type { DiceResponse } from '../../utils/dice';
@@ -9,7 +9,6 @@ import PortraitDraggableResizable from './PortraitDraggableResizable';
 import type { LayoutData } from './PortraitDraggableResizable';
 
 export default function PortraitDiceContainer(props: {
-  socket: SocketIO;
   playerId: number;
   showDice: boolean;
   onShowDice: () => void;
@@ -23,6 +22,7 @@ export default function PortraitDiceContainer(props: {
   const diceData = useRef<DiceResponse>();
 
   const showDiceRef = useRef(props.showDice);
+  const { on } = useRealtime();
 
   const [diceResult, setDiceResult] = useState<number | null>(null);
   const diceResultRef = useRef<HTMLDivElement>(null);
@@ -72,7 +72,6 @@ export default function PortraitDiceContainer(props: {
 
       diceData.current = result;
 
-      // Limpa os textos da rolagem anterior para evitar que pisquem incorretamente
       lastDiceResult.current = result.roll;
       lastDiceDescription.current = result.resultType ? result.resultType.description : '';
       
@@ -83,7 +82,6 @@ export default function PortraitDiceContainer(props: {
         await sleep(750);
         setDiceDescription(result.resultType.description);
       } else {
-        // Se for rolagem de dano, aguarda os mesmos 750ms antes de fechar
         await sleep(750); 
       }
       
@@ -102,10 +100,17 @@ export default function PortraitDiceContainer(props: {
       else diceData.current = undefined;
     }
 
-    // Comunicação original restaurada:
-    props.socket.on('diceRoll', showDiceRoll);
-    props.socket.on('diceResult', (playerId: number, results: DiceResponse[], dices: any) => {
-      if (playerId !== props.playerId) return;
+    const unsub1 = on('diceRoll', (payload) => {
+      if (payload.playerId !== props.playerId) return;
+      showDiceRoll();
+    });
+
+    const unsub2 = on('diceResult', (payload) => {
+      if (payload.playerId !== props.playerId) return;
+      
+      // SOLUÇÃO DO TRAVAMENTO: Faz uma cópia da array para evitar erro no objeto Read-Only do Supabase
+      const results = [...payload.results];
+      const dices = payload.dices;
 
       if (results.length === 1) return onDiceResult(results[0]);
 
@@ -123,10 +128,9 @@ export default function PortraitDiceContainer(props: {
     });
 
     return () => {
-      props.socket.off('diceRoll');
-      props.socket.off('diceResult');
+      unsub1?.();
+      unsub2?.();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.showDiceRoll]);
 
   const isDebugMode = !!props.debug;
@@ -153,7 +157,6 @@ export default function PortraitDiceContainer(props: {
           <source src='/dice_animation.webm' />
         </video>
         
-        {/* Usando Fade original com o Group de posicionamento do novo CSS */}
         <div className={styles.diceTextGroup}>
           <Fade in={isDebugMode || diceResult !== null}>
             <div className={styles.result} ref={diceResultRef} style={{ fontSize: '9.5rem', fontWeight: 'bold' }}>

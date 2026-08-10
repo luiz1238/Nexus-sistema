@@ -56,7 +56,7 @@ $glow-purple: rgba(138, 43, 226, 0.8);
     text-shadow: 4px 4px 0px rgba(0, 0, 0, 0.9), 0 0 25px $glow-purple;
     font-size: 48px;
     font-style: italic;
-    text-transform: uppercase;
+    text-transform: none; /* ALTERADO AQUI: Mudado de uppercase para none */
     line-height: 100%;
     overflow-wrap: break-word;
     padding-right: 1.5rem;
@@ -119,3 +119,5 @@ $glow-purple: rgba(138, 43, 226, 0.8);
     color: white;
     text-shadow: 2px 2px 0px black, 0 0 15px $glow-purple;
   }
+
+}

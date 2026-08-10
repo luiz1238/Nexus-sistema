@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Fade from 'react-bootstrap/Fade';
-import useRealtime from '../../hooks/useRealtime';
+import type { SocketIO } from '../../hooks/useSocket';
 import styles from '../../styles/modules/Portrait.module.scss';
 import { sleep } from '../../utils';
 import type { DiceResponse } from '../../utils/dice';
@@ -9,6 +9,7 @@ import PortraitDraggableResizable from './PortraitDraggableResizable';
 import type { LayoutData } from './PortraitDraggableResizable';
 
 export default function PortraitDiceContainer(props: {
+  socket: SocketIO;
   playerId: number;
   showDice: boolean;
   onShowDice: () => void;
@@ -22,7 +23,6 @@ export default function PortraitDiceContainer(props: {
   const diceData = useRef<DiceResponse>();
 
   const showDiceRef = useRef(props.showDice);
-  const { on } = useRealtime();
 
   const [diceResult, setDiceResult] = useState<number | null>(null);
   const diceResultRef = useRef<HTMLDivElement>(null);
@@ -37,7 +37,6 @@ export default function PortraitDiceContainer(props: {
   useEffect(() => {
     if (!props.showDiceRoll) return;
 
-    // Resgatado do código original: Aplicar as cores diretamente via ref (Muito mais leve pro OBS)
     const style = getAttributeStyle(props.color);
 
     if (diceResultRef.current) {
@@ -56,7 +55,6 @@ export default function PortraitDiceContainer(props: {
       if (diceVideo.current) {
         props.onShowDice();
         diceVideo.current.currentTime = 0;
-        // O .catch é uma proteção extra caso o vídeo falhe por tab suspensa
         diceVideo.current.play().catch(() => {});
       }
     }
@@ -74,17 +72,19 @@ export default function PortraitDiceContainer(props: {
 
       diceData.current = result;
 
-      // Reseta a descrição IMEDIATAMENTE (corrige a falha do dado de dano e o texto piscando)
+      // Limpa os textos da rolagem anterior para evitar que pisquem incorretamente
       lastDiceResult.current = result.roll;
       lastDiceDescription.current = result.resultType ? result.resultType.description : '';
       
       setDiceResult(result.roll);
+      setDiceDescription(null);
 
       if (result.resultType) {
         await sleep(750);
         setDiceDescription(result.resultType.description);
       } else {
-        await sleep(750);
+        // Se for rolagem de dano, aguarda os mesmos 750ms antes de fechar
+        await sleep(750); 
       }
       
       await sleep(1500);
@@ -102,14 +102,10 @@ export default function PortraitDiceContainer(props: {
       else diceData.current = undefined;
     }
 
-    const unsub1 = on('diceRoll', (payload) => {
-      if (payload.playerId !== props.playerId) return;
-      showDiceRoll();
-    });
-
-    const unsub2 = on('diceResult', (payload) => {
-      if (payload.playerId !== props.playerId) return;
-      const { results, dices } = payload;
+    // Comunicação original restaurada:
+    props.socket.on('diceRoll', showDiceRoll);
+    props.socket.on('diceResult', (playerId: number, results: DiceResponse[], dices: any) => {
+      if (playerId !== props.playerId) return;
 
       if (results.length === 1) return onDiceResult(results[0]);
 
@@ -126,7 +122,11 @@ export default function PortraitDiceContainer(props: {
       }
     });
 
-    return () => { unsub1?.(); unsub2?.(); };
+    return () => {
+      props.socket.off('diceRoll');
+      props.socket.off('diceResult');
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.showDiceRoll]);
 
   const isDebugMode = !!props.debug;
@@ -153,7 +153,7 @@ export default function PortraitDiceContainer(props: {
           <source src='/dice_animation.webm' />
         </video>
         
-        {/* Retornado para os componentes de Fade que o OBS já aceitava bem sem travar */}
+        {/* Usando Fade original com o Group de posicionamento do novo CSS */}
         <div className={styles.diceTextGroup}>
           <Fade in={isDebugMode || diceResult !== null}>
             <div className={styles.result} ref={diceResultRef} style={{ fontSize: '9.5rem', fontWeight: 'bold' }}>

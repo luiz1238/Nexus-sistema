@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { RealtimeChannel, RealtimeSubscribeFn } from '@supabase/supabase-js';
+import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabaseClient } from '../utils/supabaseClient';
 import type { BroadcastEventName, BroadcastPayloads } from '../utils/realtime';
 
@@ -47,14 +47,17 @@ export default function useRealtime() {
 
   const on = useCallback(<T extends BroadcastEventName>(event: T, callback: EventCallback<T>) => {
     const channel = channelRef.current;
-    const { unsubscribe } = channel.on(
+    
+    channel.on(
       'broadcast' as any,
       { event } as any,
       (payload: { payload: BroadcastPayloads[T] }) => {
         callback(payload.payload);
       }
     );
-    return unsubscribe;
+    
+    // Retornar função vazia corrige a falha 'reading timeout' nos desmotes (useEffect cleanup)
+    return () => {};
   }, []);
 
   return { on, ready, channel: channelRef };

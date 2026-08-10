@@ -164,6 +164,10 @@ function PortraitNameContainer(props: {
     ? { textAlign: 'end' }
     : { textAlign: 'start' };
 
+  const formattedName = playerName.show
+    ? (playerName.name || 'Desconhecido').replace(/ /g, '\n')
+    : '???';
+
   return (
     <PortraitDraggableResizable
       storageKey="name"
@@ -187,9 +191,10 @@ function PortraitNameContainer(props: {
               textShadow: `2px 2px 0px #000, -1px -1px 0px #000, 1px -1px 0px #000, -1px 1px 0px #000, 0 0 10px #${props.diceColor}, 0 0 20px #${props.diceColor}`,
               textAlign: 'center',
               lineHeight: '1.1',
+              whiteSpace: 'pre-line',
             }}
           >
-            {playerName.show ? playerName.name || 'Desconhecido' : '???'}
+            {formattedName}
           </label>
         </div>
       </Fade>

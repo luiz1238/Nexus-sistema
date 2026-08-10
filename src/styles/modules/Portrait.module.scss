@@ -56,7 +56,7 @@ $glow-purple: rgba(138, 43, 226, 0.8);
     text-shadow: 4px 4px 0px rgba(0, 0, 0, 0.9), 0 0 25px $glow-purple;
     font-size: 48px;
     font-style: italic;
-    text-transform: none; /* ALTERADO AQUI: Mudado de uppercase para none */
+    text-transform: none;
     line-height: 100%;
     overflow-wrap: break-word;
     padding-right: 1.5rem;
@@ -77,47 +77,45 @@ $glow-purple: rgba(138, 43, 226, 0.8);
   }
 }
 
-  .diceContainerInner {
-    position: relative;
-    display: inline-block;
-    width: 360px;
-  }
+.diceContainerInner {
+  position: relative;
+  display: inline-block;
+  width: 360px;
+}
 
-  .dice {
-    width: 100%;
-    filter: drop-shadow(0 0 15px rgba(138, 43, 226, 0.4));
-  }
+.dice {
+  width: 100%;
+  filter: drop-shadow(0 0 15px rgba(138, 43, 226, 0.4));
+}
 
-  .diceDebug {
-    width: 100%;
-    opacity: 0.6;
-    filter: drop-shadow(0 0 15px rgba(138, 43, 226, 0.4));
-  }
+.diceDebug {
+  width: 100%;
+  opacity: 0.6;
+  filter: drop-shadow(0 0 15px rgba(138, 43, 226, 0.4));
+}
 
-  .diceTextGroup {
-    position: absolute;
-    top: 48%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0;
-    pointer-events: none;
-  }
+.diceTextGroup {
+  position: absolute;
+  top: 48%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  pointer-events: none;
+}
 
-  .result {
-    font-size: 80px;
-    line-height: 1;
-    color: white;
-    text-shadow: 3px 3px 0px black, 0 0 25px $glow-purple;
-  }
+.result {
+  font-size: 80px;
+  line-height: 1;
+  color: white;
+  text-shadow: 3px 3px 0px black, 0 0 25px $glow-purple;
+}
 
-  .description {
-    font-size: 48px;
-    line-height: 1;
-    color: white;
-    text-shadow: 2px 2px 0px black, 0 0 15px $glow-purple;
-  }
-
+.description {
+  font-size: 48px;
+  line-height: 1;
+  color: white;
+  text-shadow: 2px 2px 0px black, 0 0 15px $glow-purple;
 }

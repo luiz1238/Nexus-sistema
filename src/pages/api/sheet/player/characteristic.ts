@@ -1,51 +1,58 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import database from '../../../../utils/database';
+import prisma from '../../../../utils/database';
 import { sessionAPI } from '../../../../utils/session';
 import { broadcast } from '../../../../utils/broadcast';
 
-function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method === 'POST') {
-    return handlePost(req, res);
-  }
-  res.status(404).end();
-}
-
-async function handlePost(req: NextApiRequest, res: NextApiResponse) {
-  const player = req.session.player;
-  const npcId: number | undefined = req.body.npcId;
-
-  if (!player || (player.admin && !npcId)) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
     res.status(401).end();
     return;
   }
 
-  const id: number | undefined = parseInt(req.body.id);
+  const player = req.session.player;
+  if (!player) {
+    res.status(401).end();
+    return;
+  }
 
-  if (!id) {
-    res.status(401).send({ message: 'Characteristic ID is undefined.' });
+  const npcId: number | undefined = req.body.npcId;
+  const targetPlayerId: number | undefined = req.body.playerId;
+
+  let playerId = player.id;
+  if (player.admin) {
+    if (npcId) playerId = npcId;
+    else if (targetPlayerId) playerId = targetPlayerId;
+    else {
+      res.status(401).end();
+      return;
+    }
+  }
+
+  const characteristicID: number | undefined = parseInt(req.body.id);
+  if (!characteristicID) {
+    res.status(401).send({ message: 'ID da característica está em branco.' });
     return;
   }
 
   const value: number | undefined = req.body.value;
-  const modifier: number | undefined = req.body.modifier;
 
-  const playerId = npcId ? npcId : player.id;
-
-  const char = await database.playerCharacteristic.update({
-    data: { value, modifier },
+  const characteristic = await prisma.playerCharacteristic.update({
     where: {
-      player_id_characteristic_id: { player_id: playerId, characteristic_id: id },
+      player_id_characteristic_id: {
+        player_id: playerId,
+        characteristic_id: characteristicID,
+      },
     },
-  });
-
-  broadcast('playerCharacteristicChange', {
-    playerId,
-    characteristicId: id,
-    value: char.value,
-    modifier: char.modifier,
+    data: { value },
   });
 
   res.end();
+
+  broadcast('playerCharacteristicChange', {
+    playerId,
+    characteristicId: characteristicID,
+    value: characteristic.value,
+  });
 }
 
 export default sessionAPI(handler);

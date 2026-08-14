@@ -13,14 +13,12 @@ function handler(req: NextApiRequest, res: NextApiResponse) {
 
 async function handleGet(req: NextApiRequest, res: NextApiResponse) {
   const player = req.session.player;
-
   if (!player) {
     res.status(401).end();
     return;
   }
 
   const playerId = parseInt(req.query.playerId as string);
-
   if (!playerId) {
     res.status(400).end();
     return;
@@ -32,95 +30,128 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse) {
   });
 
   const equipments = pe.map((eq) => eq.Equipment);
-
   res.send({ equipments });
 }
 
 async function handlePost(req: NextApiRequest, res: NextApiResponse) {
   const player = req.session.player;
-  const npcId: number | undefined = req.body.npcId;
-
-  if (!player || (player.admin && !npcId)) {
+  if (!player) {
     res.status(401).end();
     return;
   }
 
-  const id: number | undefined = req.body.id;
+  const npcId: number | undefined = req.body.npcId;
+  const targetPlayerId: number | undefined = req.body.playerId;
 
-  if (!id) {
+  let playerId = player.id;
+  if (player.admin) {
+    if (npcId) playerId = npcId;
+    else if (targetPlayerId) playerId = targetPlayerId;
+    else {
+      res.status(401).end();
+      return;
+    }
+  }
+
+  const equipmentID = req.body.id;
+  if (!equipmentID) {
     res.status(400).send({ message: 'Equipment ID is undefined.' });
     return;
   }
 
-  const currentAmmo: number | undefined = req.body.currentAmmo;
+  const currentAmmo = req.body.currentAmmo;
 
-  const playerId = npcId ? npcId : player.id;
-
-  await prisma.playerEquipment.update({
-    where: { player_id_equipment_id: { player_id: playerId, equipment_id: id } },
+  const equipment = await prisma.playerEquipment.update({
+    where: { player_id_equipment_id: { player_id: playerId, equipment_id: equipmentID } },
     data: { currentAmmo },
   });
 
   res.end();
+
+  broadcast('playerEquipmentChange', {
+    playerId,
+    equipmentID,
+    currentAmmo: equipment.currentAmmo,
+  });
 }
 
 async function handlePut(req: NextApiRequest, res: NextApiResponse) {
   const player = req.session.player;
-  const npcId: number | undefined = req.body.npcId;
-
-  if (!player || (player.admin && !npcId)) {
+  if (!player) {
     res.status(401).end();
     return;
   }
 
-  const equipID = req.body.id;
+  const npcId: number | undefined = req.body.npcId;
+  const targetPlayerId: number | undefined = req.body.playerId;
 
-  if (!equipID) {
+  let playerId = player.id;
+  if (player.admin) {
+    if (npcId) playerId = npcId;
+    else if (targetPlayerId) playerId = targetPlayerId;
+    else {
+      res.status(401).end();
+      return;
+    }
+  }
+
+  const equipmentID = req.body.id;
+  if (!equipmentID) {
     res.status(400).send({ message: 'Equipment ID is undefined.' });
     return;
   }
-
-  const playerId = npcId ? npcId : player.id;
 
   const equipment = await prisma.playerEquipment.create({
     data: {
       currentAmmo: 0,
       player_id: playerId,
-      equipment_id: equipID,
+      equipment_id: equipmentID,
     },
-    select: { currentAmmo: true, Equipment: true },
+    include: { Equipment: true },
   });
 
   res.send({ equipment });
 
-  broadcast('playerEquipmentAdd', { playerId, equipment: equipment.Equipment });
+  broadcast('playerEquipmentAdd', {
+    playerId,
+    equipment: equipment.Equipment,
+    currentAmmo: equipment.currentAmmo,
+  });
 }
 
 async function handleDelete(req: NextApiRequest, res: NextApiResponse) {
   const player = req.session.player;
-  const npcId: number | undefined = req.body.npcId;
-
-  if (!player || (player.admin && !npcId)) {
+  if (!player) {
     res.status(401).end();
     return;
   }
 
-  const equipID: number | undefined = req.body.id;
+  const npcId: number | undefined = req.body.npcId;
+  const targetPlayerId: number | undefined = req.body.playerId;
 
-  if (!equipID) {
+  let playerId = player.id;
+  if (player.admin) {
+    if (npcId) playerId = npcId;
+    else if (targetPlayerId) playerId = targetPlayerId;
+    else {
+      res.status(401).end();
+      return;
+    }
+  }
+
+  const equipmentID = req.body.id;
+  if (!equipmentID) {
     res.status(400).send({ message: 'Equipment ID is undefined.' });
     return;
   }
 
-  const playerId = npcId ? npcId : player.id;
-
   await prisma.playerEquipment.delete({
-    where: { player_id_equipment_id: { player_id: playerId, equipment_id: equipID } },
+    where: { player_id_equipment_id: { player_id: playerId, equipment_id: equipmentID } },
   });
 
   res.end();
 
-  broadcast('playerEquipmentRemove', { playerId, id: equipID });
+  broadcast('playerEquipmentRemove', { playerId, id: equipmentID });
 }
 
 export default sessionAPI(handler);

@@ -3,16 +3,14 @@ import Router from 'next/router';
 import { useEffect } from 'react';
 import Col from 'react-bootstrap/Col';
 import Container from 'react-bootstrap/Container';
-import FormGroup from 'react-bootstrap/FormGroup';
-import FormLabel from 'react-bootstrap/FormLabel';
 import Row from 'react-bootstrap/Row';
 import Spinner from 'react-bootstrap/Spinner';
 import Button from 'react-bootstrap/Button';
 import ApplicationHead from '../../../components/ApplicationHead';
-import DataContainer from '../../../components/DataContainer';
 import ErrorToastContainer from '../../../components/ErrorToastContainer';
-import PlayerAnnotationsField from '../../../components/Player/PlayerAnnotationField';
+import PlayerAnnotationField from '../../../components/Player/PlayerAnnotationField';
 import PlayerExtraInfoField from '../../../components/Player/PlayerExtraInfoField';
+import { ErrorLogger, Realtime } from '../../../contexts';
 import useRealtime from '../../../hooks/useRealtime';
 import useToast from '../../../hooks/useToast';
 import type { InferSSRProps } from '../../../utils';
@@ -25,19 +23,18 @@ type PageProps = InferSSRProps<typeof getSSP>;
 export default function Page(props: PageProps) {
 	return (
 		<>
-			<ApplicationHead title='Ficha do Personagem' />
+			<ApplicationHead title='Ficha do Personagem - Página 2' />
 			<PlayerSheet {...props} />
 		</>
 	);
 }
 
 function PlayerSheet(props: PageProps) {
-	// BLINDAGEM: Se não achar o jogador, mostra tela amigável e não quebra o site
 	if (!props || !props.player) {
 		return (
 			<Container className='text-center mt-5'>
 				<h2 style={{ color: '#8a2be2' }}>Ficha Não Encontrada.</h2>
-				<p>Não foi possível carregar os dados deste jogador.</p>
+				<p>Houve um erro de sincronização com o banco de dados.</p>
 				<Button variant="secondary" onClick={() => Router.push('/')}>Voltar ao Início</Button>
 			</Container>
 		);
@@ -47,12 +44,40 @@ function PlayerSheet(props: PageProps) {
   const { on, ready } = useRealtime();
 
   useEffect(() => {
+    // INTERCEPTADOR: Captura o ID da URL quando o Mestre acessa a página 2 do jogador
+    const queryParams = new URLSearchParams(window.location.search);
+    const urlPlayerId = queryParams.get('playerId');
+    let reqInterceptor: number | null = null;
+
+    if (urlPlayerId) {
+      reqInterceptor = api.interceptors.request.use((config) => {
+        if (config.method && ['post', 'put', 'delete', 'patch'].includes(config.method.toLowerCase())) {
+          config.data = config.data || {};
+          // Injeta o ID do jogador alvo para autorizar as edições
+          config.data.npcId = parseInt(urlPlayerId);
+          config.data.playerId = parseInt(urlPlayerId);
+        } else if (config.method?.toLowerCase() === 'get') {
+          config.params = config.params || {};
+          config.params.npcId = parseInt(urlPlayerId);
+          config.params.playerId = parseInt(urlPlayerId);
+          config.params.playerID = parseInt(urlPlayerId);
+        }
+        return config;
+      });
+    }
+
     const unsub = on('playerDelete', (payload) => {
       if (payload.playerId === props.player.id) {
         api.delete('/player').then(() => Router.push('/'));
       }
     });
-    return () => { unsub?.(); };
+
+    return () => { 
+      unsub?.(); 
+      if (reqInterceptor !== null) {
+        api.interceptors.request.eject(reqInterceptor);
+      }
+    };
   }, [on, props.player.id]);
 
   if (!ready)
@@ -68,43 +93,27 @@ function PlayerSheet(props: PageProps) {
 
 	return (
 		<>
-			<Container>
-				<Row className='display-5 text-center'>
-					<Col>Ficha do Personagem</Col>
-				</Row>
-				<Row>
-					<DataContainer title='Anotações' htmlFor='playerAnnotations' outline>
-						{/* Proteção extra caso o jogador não tenha anotações ainda */}
-						<PlayerAnnotationsField value={props.player.PlayerNote[0]?.value || ''} />
-					</DataContainer>
-				</Row>
-				<Row>
-					<DataContainer title='Detalhes Pessoais' outline>
-						{props.player.PlayerExtraInfo.map((extraInfo) => (
-							<Row className='mb-4' key={extraInfo.ExtraInfo.id}>
-								<Col>
-									<FormGroup controlId={`extraInfo${extraInfo.ExtraInfo.id}`}>
-										<Row>
-											<Col className='h4' style={{ margin: 0, color: '#c4a7e7' }}>
-												<FormLabel>{extraInfo.ExtraInfo.name}</FormLabel>
-											</Col>
-										</Row>
-										<Row>
-											<Col>
-												<PlayerExtraInfoField
-													value={extraInfo.value}
-													extraInfoId={extraInfo.ExtraInfo.id}
-													logError={addToast}
-												/>
-											</Col>
-										</Row>
-									</FormGroup>
-								</Col>
-							</Row>
-						))}
-					</DataContainer>
-				</Row>
-			</Container>
+			<ErrorLogger.Provider value={addToast}>
+        <Realtime.Provider value={null}>
+					<Container>
+						<Row className='display-5 text-center mb-3'>
+							<Col>Anotações e Detalhes</Col>
+						</Row>
+						<Row className='mb-3'>
+							<Col xs={12} md={6} className='mb-3 mb-md-0'>
+								<PlayerExtraInfoField
+									extraInfo={props.player.PlayerExtraInfo}
+								/>
+							</Col>
+							<Col xs={12} md={6}>
+								<PlayerAnnotationField
+									value={props.player.annotation}
+								/>
+							</Col>
+						</Row>
+					</Container>
+        </Realtime.Provider>
+			</ErrorLogger.Provider>
 			<ErrorToastContainer toasts={toasts} />
 		</>
 	);
@@ -119,7 +128,6 @@ async function getSSP(ctx: GetServerSidePropsContext) {
 
 	let targetId = playerSession.id;
 
-	// Se for mestre, pega o ID da URL (?playerId=X)
 	if (playerSession.admin && ctx.query.playerId) {
 		const parsedId = parseInt(ctx.query.playerId as string);
 		if (!isNaN(parsedId)) {
@@ -131,13 +139,17 @@ async function getSSP(ctx: GetServerSidePropsContext) {
 		where: { id: targetId },
 		select: {
 			id: true,
-			PlayerNote: { select: { value: true } },
-			PlayerExtraInfo: { select: { ExtraInfo: true, value: true } },
+			annotation: true,
+			PlayerExtraInfo: {
+				select: {
+					value: true,
+					ExtraInfo: true,
+				},
+			},
 		},
 	});
 
 	if (!player) {
-		// Se não for admin e não achar a ficha, destrói a sessão
 		if (!playerSession.admin) {
 			ctx.req.session.destroy();
 		}
@@ -155,4 +167,5 @@ async function getSSP(ctx: GetServerSidePropsContext) {
 		},
 	};
 }
+
 export const getServerSideProps = sessionSSR(getSSP);

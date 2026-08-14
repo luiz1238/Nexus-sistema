@@ -10,28 +10,37 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   const player = req.session.player;
-  const npcId: number | undefined = req.body.npcId;
-
-  if (!player || (player.admin && !npcId)) {
+  if (!player) {
     res.status(401).end();
     return;
   }
 
-  const statusID: number | undefined = parseInt(req.body.attrStatusID);
-  const value: boolean | undefined = req.body.value;
+  const npcId: number | undefined = req.body.npcId;
+  const targetPlayerId: number | undefined = req.body.playerId;
 
-  if (!statusID || value === undefined) {
-    res.status(401).send({ message: 'ID ou valor do status está em branco.' });
+  let playerId = player.id;
+  if (player.admin) {
+    if (npcId) playerId = npcId;
+    else if (targetPlayerId) playerId = targetPlayerId;
+    else {
+      res.status(401).end();
+      return;
+    }
+  }
+
+  const attributeStatusID: number | undefined = parseInt(req.body.id);
+  if (!attributeStatusID) {
+    res.status(401).send({ message: 'ID do status do atributo está em branco.' });
     return;
   }
 
-  const playerId = npcId ? npcId : player.id;
+  const value: boolean | undefined = req.body.value;
 
-  await prisma.playerAttributeStatus.update({
+  const attrStatus = await prisma.playerAttributeStatus.update({
     where: {
       player_id_attribute_status_id: {
         player_id: playerId,
-        attribute_status_id: statusID,
+        attribute_status_id: attributeStatusID,
       },
     },
     data: { value },
@@ -39,7 +48,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   res.end();
 
-  broadcast('playerAttributeStatusChange', { playerId, attStatusId: statusID, value });
+  broadcast('playerAttributeStatusChange', {
+    playerId,
+    attributeStatusId: attributeStatusID,
+    value: attrStatus.value,
+  });
 }
 
 export default sessionAPI(handler);

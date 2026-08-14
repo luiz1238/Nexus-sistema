@@ -1,42 +1,58 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import database from '../../../../utils/database';
+import prisma from '../../../../utils/database';
 import { sessionAPI } from '../../../../utils/session';
 import { broadcast } from '../../../../utils/broadcast';
 
-function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method === 'POST') {
-    return handlePost(req, res);
-  }
-  res.status(404).end();
-}
-
-async function handlePost(req: NextApiRequest, res: NextApiResponse) {
-  const player = req.session.player;
-  const npcId: number | undefined = req.body.npcId;
-
-  if (!player || (player.admin && !npcId)) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
     res.status(401).end();
     return;
   }
 
-  const specID: number | undefined = req.body.id;
-  const value: string | undefined = req.body.value;
-
-  if (!specID || value === undefined) {
-    res.status(400).send({ message: 'Spec ID or value is undefined.' });
+  const player = req.session.player;
+  if (!player) {
+    res.status(401).end();
     return;
   }
 
-  const playerId = npcId ? npcId : player.id;
+  const npcId: number | undefined = req.body.npcId;
+  const targetPlayerId: number | undefined = req.body.playerId;
 
-  await database.playerSpec.update({
+  let playerId = player.id;
+  if (player.admin) {
+    if (npcId) playerId = npcId;
+    else if (targetPlayerId) playerId = targetPlayerId;
+    else {
+      res.status(401).end();
+      return;
+    }
+  }
+
+  const specID: number | undefined = parseInt(req.body.id);
+  if (!specID) {
+    res.status(401).send({ message: 'ID da especialização está em branco.' });
+    return;
+  }
+
+  const value: string | undefined = req.body.value;
+
+  const spec = await prisma.playerSpec.update({
+    where: {
+      player_id_spec_id: {
+        player_id: playerId,
+        spec_id: specID,
+      },
+    },
     data: { value },
-    where: { player_id_spec_id: { player_id: playerId, spec_id: specID } },
   });
 
   res.end();
 
-  broadcast('playerSpecChange', { playerId, specId: specID, value });
+  broadcast('playerSpecChange', {
+    playerId,
+    specId: specID,
+    value: spec.value,
+  });
 }
 
 export default sessionAPI(handler);

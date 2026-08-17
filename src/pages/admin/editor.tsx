@@ -40,7 +40,7 @@ export default function Admin2(props: InferSSRProps<typeof getSSP>) {
 						<SpecEditorContainer specs={props.spec} />
 						<CharacteristicEditorContainer
 							characteristics={props.characteristic}
-							title='Características'
+							title='Atributos'
 						/>
 						<CurrencyEditorContainer currencies={props.currency} />
 						<SpecializationEditorContainer

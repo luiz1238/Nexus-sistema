@@ -107,7 +107,8 @@ function PlayerSheet(props: PageProps) {
 							</Col>
 							<Col xs={12} md={6}>
 								<PlayerAnnotationField
-									value={props.player.annotation}
+									// AQUI FOI AJUSTADO PARA LER DA TABELA CORRETA
+									value={props.player.PlayerNote?.[0]?.value || ''}
 								/>
 							</Col>
 						</Row>
@@ -139,7 +140,8 @@ async function getSSP(ctx: GetServerSidePropsContext) {
 		where: { id: targetId },
 		select: {
 			id: true,
-			annotation: true,
+			// AQUI FOI AJUSTADA A BUSCA NO BANCO DE DADOS
+			PlayerNote: { select: { value: true } },
 			PlayerExtraInfo: {
 				select: {
 					value: true,
